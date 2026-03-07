@@ -68,6 +68,17 @@ function buildAutoPhoneTag(seed = "") {
   return `AUTO-${timePart}-${randPart}-${safeSeed}`;
 }
 
+function shouldExposeDevCode() {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get("showDevCode") === "1") {
+    return true;
+  }
+
+  const hostname = window.location.hostname || "localhost";
+  const isLocalLike = hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1" || /^\d{1,3}(\.\d{1,3}){3}$/.test(hostname);
+  return isLocalLike;
+}
+
 async function apiRequest(path, options = {}) {
   const headers = {
     "Content-Type": "application/json",
@@ -332,7 +343,7 @@ async function sendRegisterCode() {
     });
 
     let message = result.message || "Código enviado.";
-    if (result.dev_code) {
+    if (result.dev_code && shouldExposeDevCode()) {
       message += ` Código (modo dev): ${result.dev_code}`;
       if (codeInput) {
         codeInput.value = result.dev_code;

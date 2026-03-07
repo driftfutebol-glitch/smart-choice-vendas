@@ -248,7 +248,7 @@ app.post("/api/auth/register/start", async (req, res) => {
     }
 
     const emailDelivery = await sendVerificationCodeEmail({ email, name, code });
-    const showDevCode = boolFromEnv(process.env.SHOW_DEV_CODE, true);
+    const showDevCode = boolFromEnv(process.env.SHOW_DEV_CODE, false);
 
     let message = "Codigo enviado para validacao no e-mail cadastrado.";
     if (!emailDelivery.sent && emailDelivery.reason === "SMTP_TIMEOUT") {
@@ -381,7 +381,7 @@ app.post("/api/auth/resend-code", async (req, res) => {
     });
 
     const emailDelivery = await sendVerificationCodeEmail({ email: user.email, name: user.name, code });
-    const showDevCode = boolFromEnv(process.env.SHOW_DEV_CODE, true);
+    const showDevCode = boolFromEnv(process.env.SHOW_DEV_CODE, false);
 
     let message = `Codigo reenviado via ${channel}`;
     if (!emailDelivery.sent && emailDelivery.reason === "SMTP_TIMEOUT") {

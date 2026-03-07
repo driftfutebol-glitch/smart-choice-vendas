@@ -27,11 +27,12 @@ function resolveApiBase() {
 const API_BASE = resolveApiBase();
 const STORE_WHATSAPP = "556684330286";
 const params = new URLSearchParams(window.location.search);
-const selectedProductId = Number(params.get("productId") || 0);
+const initialProductId = Number(params.get("productId") || 0);
 
 let authToken = localStorage.getItem("scv_token") || "";
 let selectedProduct = null;
 let currentUser = null;
+let productsCatalog = [];
 
 function setFeedback(targetId, message, type = "") {
   const el = document.getElementById(targetId);
@@ -86,9 +87,14 @@ function updateSummary() {
   if (!selectedProduct) return;
 
   const qtyInput = document.querySelector("#checkoutForm input[name='quantity']");
-  const quantity = clampQuantity(qtyInput?.value || 1);
+  const quickQtyInput = document.getElementById("checkoutQuantityQuick");
+  const sourceValue = qtyInput?.value || quickQtyInput?.value || 1;
+  const quantity = clampQuantity(sourceValue);
   if (qtyInput) {
     qtyInput.value = String(quantity);
+  }
+  if (quickQtyInput) {
+    quickQtyInput.value = String(quantity);
   }
 
   const subtotal = Number(selectedProduct.display_price || selectedProduct.price_cash || 0) * quantity;
@@ -120,6 +126,41 @@ function renderProduct(product) {
   `;
 }
 
+function setSelectedProductById(productId) {
+  const found = productsCatalog.find((item) => Number(item.id) === Number(productId));
+  if (!found) {
+    return false;
+  }
+
+  selectedProduct = found;
+  renderProduct(found);
+  updateSummary();
+  return true;
+}
+
+function renderProductSelector() {
+  const select = document.getElementById("checkoutProductSelect");
+  if (!select) return;
+
+  if (!productsCatalog.length) {
+    select.innerHTML = "<option value=\"\">Sem produtos</option>";
+    select.disabled = true;
+    return;
+  }
+
+  select.disabled = false;
+  select.innerHTML = productsCatalog
+    .map((item) => `<option value="${item.id}">${item.title} | ${item.brand} | ${formatMoney(item.display_price || item.price_cash)}</option>`)
+    .join("");
+
+  const preferredId = initialProductId || productsCatalog[0].id;
+  if (!setSelectedProductById(preferredId)) {
+    setSelectedProductById(productsCatalog[0].id);
+  }
+
+  select.value = String(selectedProduct.id);
+}
+
 function openWhatsappCheckout(message) {
   const encoded = encodeURIComponent(message);
   const url = `https://wa.me/${STORE_WHATSAPP}?text=${encoded}`;
@@ -145,29 +186,15 @@ function buildCheckoutMessage({ buyerName, buyerEmail, quantity, notes, orderId 
   return lines.join("\n");
 }
 
-async function loadProduct() {
-  if (!selectedProductId) {
-    setFeedback("checkoutFeedback", "Produto não identificado. Volte para a loja e selecione novamente.", "error");
-    const form = document.getElementById("checkoutForm");
-    if (form) {
-      form.querySelectorAll("input,select,textarea,button").forEach((el) => {
-        el.disabled = true;
-      });
-    }
-    return;
-  }
-
+async function loadProductsCatalog() {
   try {
     const result = await apiRequest("/products?onlyBeginner=0");
-    const found = (result.products || []).find((item) => Number(item.id) === selectedProductId);
-
-    if (!found) {
-      throw new Error("Produto não encontrado. Ele pode ter sido removido ou desativado.");
+    productsCatalog = result.products || [];
+    if (!productsCatalog.length) {
+      throw new Error("Sem produtos disponíveis no momento.");
     }
 
-    selectedProduct = found;
-    renderProduct(found);
-    updateSummary();
+    renderProductSelector();
   } catch (error) {
     setFeedback("checkoutFeedback", error.message, "error");
   }
@@ -296,6 +323,14 @@ async function submitCheckout(event) {
 function bindEvents() {
   document.getElementById("checkoutForm")?.addEventListener("submit", submitCheckout);
   document.querySelector("#checkoutForm input[name='quantity']")?.addEventListener("input", updateSummary);
+  document.getElementById("checkoutQuantityQuick")?.addEventListener("input", updateSummary);
+  document.getElementById("checkoutProductSelect")?.addEventListener("change", (event) => {
+    const productId = Number(event.target.value || 0);
+    if (productId) {
+      setSelectedProductById(productId);
+      setFeedback("checkoutFeedback", "", "");
+    }
+  });
 }
 
 async function bootstrap() {
@@ -306,7 +341,7 @@ async function bootstrap() {
 
   bindEvents();
   await loadCurrentUser();
-  await loadProduct();
+  await loadProductsCatalog();
 }
 
 bootstrap();

@@ -147,22 +147,7 @@ function buildCheckoutMessage({ buyerName, buyerEmail, quantity, notes, orderId 
 
 async function loadProduct() {
   if (!selectedProductId) {
-    setFeedback("checkoutFeedback", "Checkout liberado somente após selecionar produto na loja.", "error");
-    const status = document.getElementById("checkoutStatus");
-    if (status) {
-      status.textContent = "Redirecionando para a vitrine para selecionar um produto...";
-    }
-
-    const form = document.getElementById("checkoutForm");
-    if (form) {
-      form.querySelectorAll("input,select,textarea,button").forEach((el) => {
-        el.disabled = true;
-      });
-    }
-
-    setTimeout(() => {
-      window.location.href = "index.html#loja";
-    }, 1200);
+    window.location.replace("index.html#loja");
     return;
   }
 
@@ -178,6 +163,9 @@ async function loadProduct() {
     updateSummary();
   } catch (error) {
     setFeedback("checkoutFeedback", error.message, "error");
+    setTimeout(() => {
+      window.location.replace("index.html#loja");
+    }, 900);
   }
 }
 

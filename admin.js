@@ -13,7 +13,12 @@ function resolveApiBase() {
 
   const protocol = window.location.protocol === "https:" ? "https:" : "http:";
   const hostname = window.location.hostname || "localhost";
-  return `${protocol}//${hostname}:4000/api`;
+  const isLocalLike = hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1" || /^\d{1,3}(\.\d{1,3}){3}$/.test(hostname);
+  if (isLocalLike) {
+    return `${protocol}//${hostname}:4000/api`;
+  }
+
+  return "https://smart-choice-vendas.onrender.com/api";
 }
 
 const API_BASE = resolveApiBase();

@@ -192,6 +192,27 @@ function toggleAuthOnly(isAuthenticated) {
   });
 }
 
+function logoutUser() {
+  authToken = "";
+  currentUser = null;
+  localStorage.removeItem("scv_token");
+  toggleAuthOnly(false);
+
+  const walletUser = document.getElementById("walletUser");
+  const walletCredits = document.getElementById("walletCredits");
+  const sessionHint = document.getElementById("authSessionHint");
+  if (walletUser) walletUser.textContent = "-";
+  if (walletCredits) walletCredits.textContent = "0";
+  if (sessionHint) sessionHint.textContent = "";
+
+  const txList = document.getElementById("transactionsList");
+  const notificationsList = document.getElementById("notificationsList");
+  if (txList) txList.innerHTML = "";
+  if (notificationsList) notificationsList.innerHTML = "";
+
+  setFeedback("loginFeedback", "Você saiu da conta.", "success");
+}
+
 function showWelcome(message) {
   const modal = document.getElementById("welcomeModal");
   const text = document.getElementById("welcomeText");
@@ -276,8 +297,12 @@ async function loadWallet() {
 
     const userEl = document.getElementById("walletUser");
     const creditsEl = document.getElementById("walletCredits");
+    const sessionHint = document.getElementById("authSessionHint");
     if (userEl) userEl.textContent = currentUser.name;
     if (creditsEl) creditsEl.textContent = String(currentUser.credits);
+    if (sessionHint) {
+      sessionHint.textContent = `Logado como ${currentUser.name} (${currentUser.email}). Para cadastrar outro e-mail, clique em "Sair da conta".`;
+    }
 
     const txList = document.getElementById("transactionsList");
     if (txList) {
@@ -323,6 +348,11 @@ async function sendRegisterCode() {
   const codeInput = form.querySelector("input[name='code']");
   const button = document.getElementById("sendRegisterCodeBtn");
 
+  if (authToken) {
+    setFeedback("registerSingleFeedback", "Você já está logado. Saia da conta para cadastrar um novo e-mail.", "error");
+    return;
+  }
+
   if (!name || !email) {
     setFeedback("registerSingleFeedback", "Informe nome e e-mail para enviar o código.", "error");
     return;
@@ -353,7 +383,11 @@ async function sendRegisterCode() {
     message = appendDeliveryHint(message, result.delivery);
     setFeedback("registerSingleFeedback", message, result.delivery?.sent || result.dev_code ? "success" : "error");
   } catch (error) {
-    setFeedback("registerSingleFeedback", error.message, "error");
+    const rawMessage = String(error.message || "");
+    const activeAccountMessage = rawMessage.includes("Conta ja ativa")
+      ? "Esse e-mail já está cadastrado e ativo. Faça login ou use outro e-mail novo."
+      : rawMessage;
+    setFeedback("registerSingleFeedback", activeAccountMessage, "error");
   } finally {
     if (button) button.disabled = false;
   }
@@ -364,6 +398,11 @@ async function registerSingleSubmit(event) {
   const form = event.currentTarget;
   const payload = Object.fromEntries(new FormData(form));
   const submitBtn = form.querySelector("button[type='submit']");
+
+  if (authToken) {
+    setFeedback("registerSingleFeedback", "Você já está logado. Saia da conta para cadastrar um novo e-mail.", "error");
+    return;
+  }
 
   if (submitBtn) submitBtn.disabled = true;
   setFeedback("registerSingleFeedback", "Validando cadastro...", "");
@@ -543,6 +582,7 @@ async function submitPartner(event) {
 function bindEvents() {
   document.getElementById("registerSingleForm")?.addEventListener("submit", registerSingleSubmit);
   document.getElementById("sendRegisterCodeBtn")?.addEventListener("click", sendRegisterCode);
+  document.getElementById("logoutBtn")?.addEventListener("click", logoutUser);
   document.getElementById("loginForm")?.addEventListener("submit", login);
   document.getElementById("triageForm")?.addEventListener("submit", submitTriage);
   document.getElementById("supportPopupForm")?.addEventListener("submit", submitSupportPopup);

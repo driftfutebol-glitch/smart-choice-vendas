@@ -85,9 +85,11 @@
       <div class="auth-actions">
         <button id="openRegisterModal" class="btn btn-primary" type="button">Abrir cadastro</button>
         <button id="openLoginModal" class="btn btn-ghost" type="button">Abrir login</button>
+        <button id="logoutBtn" class="btn btn-ghost hidden" data-auth-only type="button">Sair da conta</button>
       </div>
 
       <small class="auth-tip">Dica: novos usuários ganham 50 créditos ao validar o cadastro.</small>
+      <small id="authSessionHint" class="auth-tip hidden" data-auth-only></small>
     </section>
 
     <section id="creditos" class="card reveal hidden" data-auth-only>

@@ -9,6 +9,15 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700&family=Rajdhani:wght@400;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
+  <script>
+    // Redireciona imediatamente se abrir o checkout sem um produto escolhido
+    (function () {
+      const params = new URLSearchParams(window.location.search);
+      if (!params.get("productId")) {
+        window.location.replace("index.html#loja");
+      }
+    })();
+  </script>
 </head>
 <body>
   <div class="noise" aria-hidden="true"></div>

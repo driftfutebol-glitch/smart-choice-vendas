@@ -33,6 +33,10 @@ let authToken = localStorage.getItem("scv_token") || "";
 let selectedProduct = null;
 let currentUser = null;
 
+function revealAll() {
+  document.querySelectorAll(".reveal").forEach((el) => el.classList.add("visible"));
+}
+
 function setFeedback(targetId, message, type = "") {
   const el = document.getElementById(targetId);
   if (!el) return;
@@ -301,6 +305,7 @@ async function bootstrap() {
   }
 
   bindEvents();
+  revealAll();
   await loadCurrentUser();
   await loadProduct();
 }

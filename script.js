@@ -1,4 +1,6 @@
 function resolveApiBase() {
+  const hostname = window.location.hostname || "localhost";
+  const isLocalLikeHost = hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1" || /^\d{1,3}(\.\d{1,3}){3}$/.test(hostname);
   const params = new URLSearchParams(window.location.search);
   const apiFromQuery = (params.get("api") || "").trim();
   if (apiFromQuery) {
@@ -8,13 +10,14 @@ function resolveApiBase() {
 
   const stored = (localStorage.getItem("scv_api_base") || "").trim();
   if (stored) {
-    return stored.replace(/\/+$/, "");
+    const storedIsLocal = /localhost|127\.0\.0\.1|::1/.test(stored);
+    if (!storedIsLocal || isLocalLikeHost) {
+      return stored.replace(/\/+$/, "");
+    }
   }
 
   const protocol = window.location.protocol === "https:" ? "https:" : "http:";
-  const hostname = window.location.hostname || "localhost";
-  const isLocalLike = hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1" || /^\d{1,3}(\.\d{1,3}){3}$/.test(hostname);
-  if (isLocalLike) {
+  if (isLocalLikeHost) {
     return `${protocol}//${hostname}:4000/api`;
   }
 
@@ -52,6 +55,17 @@ function appendDeliveryHint(message, delivery) {
   }
 
   return message;
+}
+
+function isStrongPassword(password) {
+  return /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).{8,}$/.test(String(password || ""));
+}
+
+function buildAutoPhoneTag(seed = "") {
+  const safeSeed = String(seed).replace(/[^a-z0-9]/gi, "").toLowerCase().slice(-6) || "user";
+  const timePart = Date.now().toString(36);
+  const randPart = Math.random().toString(36).slice(2, 8);
+  return `AUTO-${timePart}-${randPart}-${safeSeed}`;
 }
 
 async function apiRequest(path, options = {}) {
@@ -126,8 +140,12 @@ function setupAuthModals() {
 
   document.getElementById("closeRegisterModal")?.addEventListener("click", () => closeModal("registerModal"));
   document.getElementById("closeLoginModal")?.addEventListener("click", () => closeModal("loginModal"));
+  document.getElementById("closeSupportModal")?.addEventListener("click", () => closeModal("supportModal"));
 
-  ["registerModal", "loginModal", "welcomeModal"].forEach((modalId) => {
+  document.getElementById("supportFloatBtn")?.addEventListener("click", () => openModal("supportModal"));
+  document.getElementById("openSupportModalFromHero")?.addEventListener("click", () => openModal("supportModal"));
+
+  ["registerModal", "loginModal", "welcomeModal", "supportModal"].forEach((modalId) => {
     document.getElementById(modalId)?.addEventListener("click", (event) => {
       if (event.target.id === modalId) {
         closeModal(modalId);
@@ -208,7 +226,7 @@ function renderProducts(products) {
             ${beginnerText}
           </div>
           <div class="product-actions">
-            <button class="btn btn-ghost action-cash" data-id="${product.id}">Comprar (pedido)</button>
+            <button class="btn btn-ghost action-checkout" data-id="${product.id}">Ir para checkout</button>
             <button class="btn btn-primary action-credits" data-id="${product.id}">Trocar créditos</button>
           </div>
         </article>
@@ -284,67 +302,36 @@ async function loadWallet() {
   }
 }
 
-async function registerStart(event) {
-  event.preventDefault();
-  const form = event.currentTarget;
-  const payload = Object.fromEntries(new FormData(form));
-  const submitBtn = form.querySelector("button[type='submit']");
+async function sendRegisterCode() {
+  const form = document.getElementById("registerSingleForm");
+  if (!form) return;
 
-  if (submitBtn) submitBtn.disabled = true;
-  setFeedback("registerStartFeedback", "Enviando código...", "");
+  const formData = new FormData(form);
+  const name = String(formData.get("name") || "").trim();
+  const email = String(formData.get("email") || "").trim().toLowerCase();
+  const codeInput = form.querySelector("input[name='code']");
+  const button = document.getElementById("sendRegisterCodeBtn");
 
-  try {
-    const result = await apiRequest("/auth/register/start", {
-      method: "POST",
-      body: JSON.stringify(payload)
-    });
-
-    let message = result.message || "Código enviado.";
-    const completeForm = document.getElementById("registerCompleteForm");
-    if (completeForm) {
-      completeForm.querySelector("input[name='email']").value = payload.email || "";
-    }
-
-    if (result.dev_code) {
-      message += ` Código (modo dev): ${result.dev_code}`;
-      if (completeForm) {
-        completeForm.querySelector("input[name='code']").value = result.dev_code;
-      }
-    }
-
-    message = appendDeliveryHint(message, result.delivery);
-    setFeedback("registerStartFeedback", message, result.delivery?.sent || result.dev_code ? "success" : "error");
-  } catch (error) {
-    setFeedback("registerStartFeedback", error.message, "error");
-  } finally {
-    if (submitBtn) submitBtn.disabled = false;
-  }
-}
-
-async function resendCode() {
-  const emailInput = document.querySelector("#registerCompleteForm input[name='email']");
-  const codeInput = document.querySelector("#registerCompleteForm input[name='code']");
-  const button = document.getElementById("resendCodeBtn");
-  const email = String(emailInput?.value || "").trim().toLowerCase();
-
-  if (!email) {
-    setFeedback("resendCodeFeedback", "Informe o e-mail para reenviar o código.", "error");
+  if (!name || !email) {
+    setFeedback("registerSingleFeedback", "Informe nome e e-mail para enviar o código.", "error");
     return;
   }
 
   if (button) button.disabled = true;
-  setFeedback("resendCodeFeedback", "Reenviando código...", "");
+  setFeedback("registerSingleFeedback", "Enviando código...", "");
 
   try {
-    const result = await apiRequest("/auth/resend-code", {
+    const result = await apiRequest("/auth/register/start", {
       method: "POST",
       body: JSON.stringify({
+        name,
         email,
-        channel: "EMAIL"
+        // Compatibilidade com backend antigo que ainda exige telefone.
+        phone: buildAutoPhoneTag(email)
       })
     });
 
-    let message = result.message || "Código reenviado.";
+    let message = result.message || "Código enviado.";
     if (result.dev_code) {
       message += ` Código (modo dev): ${result.dev_code}`;
       if (codeInput) {
@@ -353,37 +340,49 @@ async function resendCode() {
     }
 
     message = appendDeliveryHint(message, result.delivery);
-    setFeedback("resendCodeFeedback", message, result.delivery?.sent || result.dev_code ? "success" : "error");
+    setFeedback("registerSingleFeedback", message, result.delivery?.sent || result.dev_code ? "success" : "error");
   } catch (error) {
-    setFeedback("resendCodeFeedback", error.message, "error");
+    setFeedback("registerSingleFeedback", error.message, "error");
   } finally {
     if (button) button.disabled = false;
   }
 }
 
-async function registerComplete(event) {
+async function registerSingleSubmit(event) {
   event.preventDefault();
   const form = event.currentTarget;
   const payload = Object.fromEntries(new FormData(form));
   const submitBtn = form.querySelector("button[type='submit']");
 
   if (submitBtn) submitBtn.disabled = true;
-  setFeedback("registerCompleteFeedback", "Validando cadastro...", "");
+  setFeedback("registerSingleFeedback", "Validando cadastro...", "");
 
   try {
+    if (!payload.name || !payload.email || !payload.code || !payload.password) {
+      throw new Error("Preencha nome, e-mail, senha e código.");
+    }
+
+    if (!isStrongPassword(payload.password)) {
+      throw new Error("Senha fraca. Use 8+ caracteres com maiúscula, minúscula, número e símbolo.");
+    }
+
     await apiRequest("/auth/register/complete", {
       method: "POST",
-      body: JSON.stringify(payload)
+      body: JSON.stringify({
+        email: payload.email,
+        code: payload.code,
+        password: payload.password
+      })
     });
 
-    setFeedback("registerCompleteFeedback", "Conta ativada. Agora faça login.", "success");
+    setFeedback("registerSingleFeedback", "Conta ativada. Agora faça login.", "success");
     form.reset();
     setTimeout(() => {
       closeModal("registerModal");
       openModal("loginModal");
     }, 600);
   } catch (error) {
-    setFeedback("registerCompleteFeedback", error.message, "error");
+    setFeedback("registerSingleFeedback", error.message, "error");
   } finally {
     if (submitBtn) submitBtn.disabled = false;
   }
@@ -448,22 +447,10 @@ async function buyWithCredits(productId) {
   }
 }
 
-async function createCashOrder(productId) {
-  if (!authToken) {
-    openModal("loginModal");
-    return;
-  }
-
-  try {
-    const result = await apiRequest("/orders/cash", {
-      method: "POST",
-      body: JSON.stringify({ productId, quantity: 1 })
-    });
-
-    alert(`Pedido #${result.order.id} criado e aguardando aprovação do admin.`);
-  } catch (error) {
-    alert(error.message);
-  }
+function goToCheckout(productId) {
+  const base = window.location.pathname.endsWith("/") ? `${window.location.pathname}checkout.html` : "checkout.html";
+  const apiParam = encodeURIComponent(API_BASE);
+  window.location.href = `${base}?productId=${productId}&api=${apiParam}`;
 }
 
 async function submitTriage(event) {
@@ -483,6 +470,38 @@ async function submitTriage(event) {
     }
   } catch (error) {
     setFeedback("triageFeedback", error.message, "error");
+  }
+}
+
+async function submitSupportPopup(event) {
+  event.preventDefault();
+  const formData = new FormData(event.currentTarget);
+  const payload = {
+    name: String(formData.get("name") || "").trim(),
+    orderNumber: String(formData.get("orderNumber") || "").trim(),
+    subject: String(formData.get("subject") || "").trim(),
+    question: String(formData.get("question") || "").trim(),
+    forceHuman: formData.get("forceHuman") === "on"
+  };
+
+  if (!payload.name || !payload.subject || !payload.question) {
+    setFeedback("supportPopupFeedback", "Preencha nome, assunto e mensagem.", "error");
+    return;
+  }
+
+  try {
+    const result = await apiRequest("/support/triage", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+
+    if (result.resolved) {
+      setFeedback("supportPopupFeedback", `IA respondeu: ${result.answer}`, "success");
+    } else {
+      setFeedback("supportPopupFeedback", `Ticket humano criado: #${result.ticketId}`, "success");
+    }
+  } catch (error) {
+    setFeedback("supportPopupFeedback", error.message, "error");
   }
 }
 
@@ -511,11 +530,11 @@ async function submitPartner(event) {
 }
 
 function bindEvents() {
-  document.getElementById("registerStartForm")?.addEventListener("submit", registerStart);
-  document.getElementById("registerCompleteForm")?.addEventListener("submit", registerComplete);
-  document.getElementById("resendCodeBtn")?.addEventListener("click", resendCode);
+  document.getElementById("registerSingleForm")?.addEventListener("submit", registerSingleSubmit);
+  document.getElementById("sendRegisterCodeBtn")?.addEventListener("click", sendRegisterCode);
   document.getElementById("loginForm")?.addEventListener("submit", login);
   document.getElementById("triageForm")?.addEventListener("submit", submitTriage);
+  document.getElementById("supportPopupForm")?.addEventListener("submit", submitSupportPopup);
   document.getElementById("partnerForm")?.addEventListener("submit", submitPartner);
 
   document.querySelectorAll(".chip").forEach((chip) => {
@@ -540,8 +559,8 @@ function bindEvents() {
       await buyWithCredits(productId);
     }
 
-    if (button.classList.contains("action-cash")) {
-      await createCashOrder(productId);
+    if (button.classList.contains("action-checkout")) {
+      goToCheckout(productId);
     }
   });
 }

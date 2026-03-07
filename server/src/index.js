@@ -114,6 +114,19 @@ function toInt(value, fallback = 0) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function isStrongPassword(password) {
+  const candidate = String(password || "");
+  // At least 8 chars with upper, lower, number and special char.
+  return /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).{8,}$/.test(candidate);
+}
+
+function buildAutoPhoneTag(seed = "") {
+  const safeSeed = String(seed).replace(/[^a-z0-9]/gi, "").toLowerCase().slice(-6) || "user";
+  const timePart = Date.now().toString(36);
+  const randPart = Math.random().toString(36).slice(2, 8);
+  return `AUTO-${timePart}-${randPart}-${safeSeed}`;
+}
+
 async function getUserById(db, userId) {
   return db.get(
     `
@@ -179,17 +192,18 @@ app.post("/api/auth/register/start", async (req, res) => {
     const db = await getDb();
     const name = String(req.body.name || "").trim();
     const email = String(req.body.email || "").trim().toLowerCase();
-    const phone = String(req.body.phone || "").trim();
+    const requestedPhone = String(req.body.phone || "").trim();
 
-    if (!name || !email || !phone) {
-      return res.status(400).json({ error: "Nome, email e telefone sao obrigatorios" });
+    if (!name || !email) {
+      return res.status(400).json({ error: "Nome e email sao obrigatorios" });
     }
 
-    const existing = await db.get("SELECT id, status_usuario FROM users WHERE email = ?", [email]);
-    const phoneInUse = await db.get("SELECT id FROM users WHERE phone = ? AND email <> ?", [phone, email]);
-
-    if (phoneInUse) {
-      return res.status(400).json({ error: "Telefone ja cadastrado" });
+    const existing = await db.get("SELECT id, status_usuario, phone FROM users WHERE email = ?", [email]);
+    if (requestedPhone) {
+      const phoneInUse = await db.get("SELECT id FROM users WHERE phone = ? AND email <> ?", [requestedPhone, email]);
+      if (phoneInUse) {
+        return res.status(400).json({ error: "Telefone ja cadastrado" });
+      }
     }
 
     if (existing && existing.status_usuario === "ATIVO") {
@@ -198,6 +212,7 @@ app.post("/api/auth/register/start", async (req, res) => {
 
     const code = generateCode();
     const expiresAt = addMinutes(new Date(), 15).toISOString();
+    const phone = requestedPhone || existing?.phone || buildAutoPhoneTag(email);
 
     if (existing) {
       await db.run(
@@ -235,11 +250,16 @@ app.post("/api/auth/register/start", async (req, res) => {
     const emailDelivery = await sendVerificationCodeEmail({ email, name, code });
     const showDevCode = boolFromEnv(process.env.SHOW_DEV_CODE, true);
 
+    let message = "Codigo enviado para validacao no e-mail cadastrado.";
+    if (!emailDelivery.sent && emailDelivery.reason === "SMTP_TIMEOUT") {
+      message = "Codigo gerado. Envio por e-mail em processamento, verifique sua caixa de entrada em instantes.";
+    } else if (!emailDelivery.sent) {
+      message = "Codigo gerado. Envio de e-mail nao configurado ou falhou, use o codigo dev para teste.";
+    }
+
     const response = {
       ok: true,
-      message: emailDelivery.sent
-        ? "Codigo enviado para validacao no e-mail cadastrado."
-        : "Codigo gerado. Envio de e-mail nao configurado ou falhou, use o codigo dev para teste.",
+      message,
       delivery: emailDelivery
     };
 
@@ -264,8 +284,10 @@ app.post("/api/auth/register/complete", async (req, res) => {
       return res.status(400).json({ error: "Email, codigo e senha sao obrigatorios" });
     }
 
-    if (password.length < 6) {
-      return res.status(400).json({ error: "Senha precisa ter pelo menos 6 caracteres" });
+    if (!isStrongPassword(password)) {
+      return res.status(400).json({
+        error: "Senha fraca. Use no minimo 8 caracteres com letra maiuscula, minuscula, numero e simbolo."
+      });
     }
 
     const user = await db.get("SELECT * FROM users WHERE email = ?", [email]);
@@ -361,11 +383,16 @@ app.post("/api/auth/resend-code", async (req, res) => {
     const emailDelivery = await sendVerificationCodeEmail({ email: user.email, name: user.name, code });
     const showDevCode = boolFromEnv(process.env.SHOW_DEV_CODE, true);
 
+    let message = `Codigo reenviado via ${channel}`;
+    if (!emailDelivery.sent && emailDelivery.reason === "SMTP_TIMEOUT") {
+      message = `Codigo gerado e envio via ${channel} em processamento. Aguarde alguns instantes.`;
+    } else if (!emailDelivery.sent) {
+      message = "Codigo gerado, mas o envio de e-mail nao foi concluido. Use o codigo dev para teste.";
+    }
+
     const response = {
       ok: true,
-      message: emailDelivery.sent
-        ? `Codigo reenviado via ${channel}`
-        : "Codigo gerado, mas o envio de e-mail nao foi concluido. Use o codigo dev para teste.",
+      message,
       delivery: emailDelivery
     };
 
@@ -640,6 +667,9 @@ app.post("/api/orders/cash", authRequired, async (req, res) => {
       ok: true,
       order: {
         id: result.lastID,
+        productId: product.id,
+        productTitle: product.title,
+        quantity,
         totalCash,
         creditReward,
         status: "PENDING"
@@ -714,13 +744,19 @@ app.post("/api/support/triage", optionalAuth, async (req, res) => {
     const orderNumber = String(req.body.orderNumber || "").trim();
     const subject = String(req.body.subject || "").trim();
     const question = String(req.body.question || "").trim();
+    const forceHuman = Boolean(req.body.forceHuman);
 
     if (!name || !subject || !question) {
       return res.status(400).json({ error: "Nome, assunto e pergunta sao obrigatorios" });
     }
 
     const faqRows = await db.all("SELECT question, answer, keywords FROM faq_entries");
-    const result = triageFaq(question, faqRows);
+    const result = forceHuman
+      ? {
+          resolved: false,
+          answer: "Solicitacao encaminhada diretamente para atendimento humano."
+        }
+      : triageFaq(question, faqRows);
 
     if (result.resolved) {
       return res.json({
@@ -733,10 +769,10 @@ app.post("/api/support/triage", optionalAuth, async (req, res) => {
 
     const created = await db.run(
       `
-      INSERT INTO tickets (user_id, name, order_number, subject, message, ai_attempted, ai_resolution)
-      VALUES (?, ?, ?, ?, ?, 1, ?)
+        INSERT INTO tickets (user_id, name, order_number, subject, message, ai_attempted, ai_resolution)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
       `,
-      [req.auth?.sub || null, name, orderNumber, subject, question, result.answer]
+      [req.auth?.sub || null, name, orderNumber, subject, question, forceHuman ? 0 : 1, result.answer]
     );
 
     return res.json({
@@ -845,7 +881,7 @@ app.post("/api/admin/users", authRequired, adminRequired, requireAdminPermission
   try {
     const name = String(req.body.name || "").trim();
     const email = String(req.body.email || "").trim().toLowerCase();
-    const phone = String(req.body.phone || "").trim();
+    const phoneInput = String(req.body.phone || "").trim();
     const password = String(req.body.password || "");
     const roleInput = String(req.body.role || "USER").toUpperCase();
     const role = ["USER", "ADMIN"].includes(roleInput) ? roleInput : "USER";
@@ -854,18 +890,40 @@ app.post("/api/admin/users", authRequired, adminRequired, requireAdminPermission
     const initialCredits = toInt(req.body.initialCredits, 0);
     const requestedPermissions = sanitizePermissions(req.body.permissions || []);
 
-    if (!name || !email || !phone || password.length < 6) {
-      return res.status(400).json({ error: "Nome, email, telefone e senha (minimo 6) sao obrigatorios" });
+    if (!name || !email || !isStrongPassword(password)) {
+      return res.status(400).json({
+        error: "Nome, email e senha forte sao obrigatorios (8+ com maiuscula, minuscula, numero e simbolo)"
+      });
     }
+
+    let phone = phoneInput || buildAutoPhoneTag(email);
 
     const emailExists = await db.get("SELECT id FROM users WHERE lower(email) = lower(?)", [email]);
     if (emailExists) {
       return res.status(409).json({ error: "Email ja cadastrado" });
     }
 
-    const phoneExists = await db.get("SELECT id FROM users WHERE phone = ?", [phone]);
-    if (phoneExists) {
-      return res.status(409).json({ error: "Telefone ja cadastrado" });
+    if (phoneInput) {
+      const phoneExists = await db.get("SELECT id FROM users WHERE phone = ?", [phoneInput]);
+      if (phoneExists) {
+        return res.status(409).json({ error: "Telefone ja cadastrado" });
+      }
+    } else {
+      // Fallback in the unlikely case of generated collision.
+      let attempts = 0;
+      while (attempts < 5) {
+        const collision = await db.get("SELECT id FROM users WHERE phone = ?", [phone]);
+        if (!collision) {
+          break;
+        }
+        phone = buildAutoPhoneTag(`${email}-${attempts}`);
+        attempts += 1;
+      }
+
+      const stillCollision = await db.get("SELECT id FROM users WHERE phone = ?", [phone]);
+      if (stillCollision) {
+        return res.status(500).json({ error: "Falha ao gerar identificador de contato unico" });
+      }
     }
 
     if (role === "ADMIN" && !req.adminContext.isOwner && !req.adminContext.permissions.has("USERS_ROLE")) {
@@ -1213,6 +1271,25 @@ app.post("/api/admin/orders/:id/approve", authRequired, adminRequired, requireAd
     return res.status(500).json({ error: "Falha ao aprovar pedido" });
   }
 });
+
+app.get("/api/admin/products", authRequired, adminRequired, requireAdminPermission("PRODUCTS_MANAGE"), async (_req, res) => {
+  try {
+    const db = await getDb();
+    const products = await db.all(
+      `
+      SELECT id, title, brand, category, description, technical_specs, price_cash, price_credits, beginner_price, discount_percent,
+             image_url, video_url, stock, is_beginner_offer, promoted, is_active, created_at
+      FROM products
+      ORDER BY id DESC
+      `
+    );
+
+    return res.json({ ok: true, products });
+  } catch (error) {
+    return res.status(500).json({ error: "Falha ao listar produtos do painel admin" });
+  }
+});
+
 app.post("/api/admin/products", authRequired, adminRequired, requireAdminPermission("PRODUCTS_MANAGE"), async (req, res) => {
   try {
     const db = await getDb();
@@ -1475,8 +1552,10 @@ app.post("/api/admin/users/:id/password", authRequired, adminRequired, requireAd
       return res.status(403).json({ error: "Somente o owner pode redefinir senha do owner" });
     }
 
-    if (newPassword.length < 6) {
-      return res.status(400).json({ error: "Nova senha precisa ter pelo menos 6 caracteres" });
+    if (!isStrongPassword(newPassword)) {
+      return res.status(400).json({
+        error: "Nova senha fraca. Use 8+ caracteres com maiuscula, minuscula, numero e simbolo."
+      });
     }
 
     const hash = await bcrypt.hash(newPassword, 10);
@@ -1579,6 +1658,21 @@ app.post("/api/admin/discounts", authRequired, adminRequired, requireAdminPermis
     const product = await db.get("SELECT id, price_cash FROM products WHERE id = ?", [productId]);
     if (!product) {
       return res.status(404).json({ error: "Produto nao encontrado" });
+    }
+
+    if (discountPercent === 0) {
+      await db.run(
+        "UPDATE products SET discount_percent = 0, beginner_price = NULL, is_beginner_offer = 0, promoted = 0 WHERE id = ?",
+        [productId]
+      );
+
+      await logActivity(db, {
+        actorUserId: req.auth.sub,
+        action: "ADMIN_DISCOUNT_CLEAR",
+        details: `Produto ${productId} desconto removido`
+      });
+
+      return res.json({ ok: true, beginner_price: null, removed: true });
     }
 
     const discounted = Number(product.price_cash) * (1 - discountPercent / 100);

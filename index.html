@@ -22,6 +22,7 @@
       <a href="#home">Início</a>
       <a href="#auth">Acesso</a>
       <a href="#loja">Loja</a>
+      <a href="checkout.html">Checkout</a>
       <a href="#creditos">Créditos</a>
       <a href="troca-creditos.html">Troca</a>
       <a href="#suporte">Suporte</a>
@@ -39,6 +40,7 @@
         <div class="hero-actions">
           <a class="btn btn-primary" href="#loja">Ver ofertas agora</a>
           <a class="btn btn-ghost" href="#auth">Criar conta e ganhar 50 créditos</a>
+          <button id="openSupportModalFromHero" class="btn btn-ghost" type="button">Atendimento IA/Humano</button>
         </div>
       </div>
       <div class="hero-gallery">
@@ -234,36 +236,26 @@
         <button id="closeRegisterModal" class="btn btn-ghost" type="button">Fechar</button>
       </div>
 
-      <form id="registerStartForm" class="stack">
-        <h4>Etapa 1: enviar código</h4>
+      <form id="registerSingleForm" class="stack">
+        <h4>Cadastro com verificação única</h4>
         <label>Nome
           <input type="text" name="name" required />
         </label>
         <label>E-mail
           <input type="email" name="email" required />
         </label>
-        <label>Telefone (WhatsApp)
-          <input type="text" name="phone" required />
+        <label>Senha
+          <input type="password" name="password" minlength="8" required />
         </label>
-        <button class="btn btn-primary" type="submit">Enviar código</button>
-        <small id="registerStartFeedback"></small>
-      </form>
-
-      <form id="registerCompleteForm" class="stack login-box">
-        <h4>Etapa 2: validar e ativar</h4>
-        <label>E-mail
-          <input type="email" name="email" required />
-        </label>
+        <small class="auth-tip">Senha forte: 8+ caracteres, com maiúscula, minúscula, número e símbolo.</small>
         <label>Código de verificação
           <input type="text" name="code" required />
         </label>
-        <button id="resendCodeBtn" class="btn btn-ghost" type="button">Reenviar código</button>
-        <small id="resendCodeFeedback"></small>
-        <label>Senha
-          <input type="password" name="password" minlength="6" required />
-        </label>
-        <button class="btn btn-primary" type="submit">Ativar usuário</button>
-        <small id="registerCompleteFeedback"></small>
+        <div class="auth-actions">
+          <button id="sendRegisterCodeBtn" class="btn btn-ghost" type="button">Enviar código</button>
+          <button class="btn btn-primary" type="submit">Ativar cadastro</button>
+        </div>
+        <small id="registerSingleFeedback"></small>
       </form>
     </div>
   </div>
@@ -293,6 +285,43 @@
       <h3>Boas-vindas</h3>
       <p id="welcomeText"></p>
       <button id="closeWelcome" class="btn btn-primary" type="button">Continuar</button>
+    </div>
+  </div>
+
+  <button id="supportFloatBtn" class="support-float-btn" type="button">Atendimento</button>
+
+  <div id="supportModal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Atendimento inteligente">
+    <div class="modal-card auth-modal-card">
+      <div class="modal-head">
+        <h3>Central de Atendimento</h3>
+        <button id="closeSupportModal" class="btn btn-ghost" type="button">Fechar</button>
+      </div>
+
+      <form id="supportPopupForm" class="stack">
+        <label>Nome
+          <input type="text" name="name" required />
+        </label>
+        <label>Número do pedido (se já tiver)
+          <input type="text" name="orderNumber" />
+        </label>
+        <label>Assunto
+          <select name="subject" required>
+            <option value="Dúvida de compra">Dúvida de compra</option>
+            <option value="Acompanhar pedido">Acompanhar pedido</option>
+            <option value="Pagamento">Pagamento</option>
+            <option value="Garantia/Reembolso">Garantia/Reembolso</option>
+          </select>
+        </label>
+        <label>Mensagem
+          <textarea name="question" rows="4" required></textarea>
+        </label>
+        <label class="inline-check">
+          <input type="checkbox" name="forceHuman" />
+          Quero transferir direto para atendimento humano
+        </label>
+        <button class="btn btn-primary" type="submit">Enviar atendimento</button>
+        <small id="supportPopupFeedback"></small>
+      </form>
     </div>
   </div>
 

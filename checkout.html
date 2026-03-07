@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Checkout | Smart Choice Vendas</title>
+  <meta name="description" content="Finalize seu pedido na Smart Choice Vendas com atendimento humano no chat ou WhatsApp." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700&family=Rajdhani:wght@400;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="noise" aria-hidden="true"></div>
+  <div class="glow glow-a" aria-hidden="true"></div>
+  <div class="glow glow-b" aria-hidden="true"></div>
+
+  <header class="topbar">
+    <a class="brand" href="index.html"><img class="brand-logo" src="assets/logos/scv-logo-primary.svg" alt="Smart Choice Vendas" /></a>
+    <nav class="menu">
+      <a href="index.html#home">Início</a>
+      <a href="index.html#loja">Loja</a>
+      <a href="checkout.html">Checkout</a>
+      <a href="troca-creditos.html">Troca por Créditos</a>
+      <a href="index.html#suporte">Suporte</a>
+      <a href="painel-admin-pedro-oculto.html">Admin</a>
+    </nav>
+  </header>
+
+  <main class="container">
+    <section class="card reveal">
+      <div class="card-head">
+        <h1>Finalizar Compra</h1>
+        <p>Escolha o canal de pagamento: atendimento humano no chat ou WhatsApp com envio automático do pedido.</p>
+      </div>
+      <p id="checkoutStatus" class="auth-tip"></p>
+    </section>
+
+    <section class="checkout-layout">
+      <article class="card checkout-card reveal">
+        <h2>Produto Selecionado</h2>
+        <div id="checkoutProductCard" class="checkout-product"></div>
+      </article>
+
+      <article class="card checkout-card reveal">
+        <h2>Resumo do Pedido</h2>
+        <div class="checkout-summary">
+          <p><span>Subtotal</span><strong id="summarySubtotal">R$ 0,00</strong></p>
+          <p><span>Bônus previsto (após aprovação)</span><strong id="summaryReward">0 créditos</strong></p>
+        </div>
+      </article>
+    </section>
+
+    <section class="card reveal">
+      <div class="card-head">
+        <h2>Dados para Finalização</h2>
+        <p>Se estiver logado, o pedido oficial é criado automaticamente no sistema.</p>
+      </div>
+
+      <form id="checkoutForm" class="stack">
+        <div class="grid-two">
+          <label>Nome
+            <input type="text" name="buyerName" required />
+          </label>
+          <label>E-mail de contato
+            <input type="email" name="buyerEmail" required />
+          </label>
+        </div>
+
+        <div class="grid-two">
+          <label>Quantidade
+            <input type="number" name="quantity" min="1" max="10" value="1" required />
+          </label>
+          <label>Canal de pagamento
+            <select name="paymentChannel" required>
+              <option value="CHAT_HUMANO">Atendimento humano no chat do site</option>
+              <option value="WHATSAPP">Finalizar no WhatsApp</option>
+            </select>
+          </label>
+        </div>
+
+        <label>Observações
+          <textarea name="notes" rows="4" placeholder="Cor, memória, preferência de entrega ou dúvida rápida."></textarea>
+        </label>
+
+        <button class="btn btn-primary" type="submit">Criar pedido e continuar</button>
+        <small id="checkoutFeedback"></small>
+      </form>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <p>&copy; <span id="year"></span> Smart Choice Vendas.</p>
+    <p class="sub">Finalização rápida: WhatsApp 66 8433-0286 | Instagram @smartchoicevendas</p>
+  </footer>
+
+  <script src="checkout.js" defer></script>
+</body>
+</html>

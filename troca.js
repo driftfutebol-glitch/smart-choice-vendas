@@ -1,4 +1,6 @@
 function resolveApiBase() {
+  const hostname = window.location.hostname || "localhost";
+  const isLocalLikeHost = hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1" || /^\d{1,3}(\.\d{1,3}){3}$/.test(hostname);
   const params = new URLSearchParams(window.location.search);
   const apiFromQuery = (params.get("api") || "").trim();
   if (apiFromQuery) {
@@ -8,20 +10,22 @@ function resolveApiBase() {
 
   const stored = (localStorage.getItem("scv_api_base") || "").trim();
   if (stored) {
-    return stored.replace(/\/+$/, "");
+    const storedIsLocal = /localhost|127\.0\.0\.1|::1/.test(stored);
+    if (!storedIsLocal || isLocalLikeHost) {
+      return stored.replace(/\/+$/, "");
+    }
   }
 
   const protocol = window.location.protocol === "https:" ? "https:" : "http:";
-  const hostname = window.location.hostname || "localhost";
-  const isLocalLike = hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1" || /^\d{1,3}(\.\d{1,3}){3}$/.test(hostname);
-  if (isLocalLike) {
+  if (isLocalLikeHost) {
     return `${protocol}//${hostname}:4000/api`;
   }
 
   return "https://smart-choice-vendas.onrender.com/api";
 }
 
-const API_BASE = resolveApiBase();let token = localStorage.getItem("scv_token") || "";
+const API_BASE = resolveApiBase();
+let token = localStorage.getItem("scv_token") || "";
 
 async function request(path, options = {}) {
   const headers = {

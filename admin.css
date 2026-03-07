@@ -252,3 +252,111 @@ td.actions button {
   height: 44px;
   width: auto;
 }
+
+.admin-top {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.admin-top-main {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.admin-top-actions {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.analytics-grid {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.trend-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.4rem;
+}
+
+.trend-list li {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0.5rem 0.6rem;
+  background: rgba(255, 255, 255, 0.02);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.trend-list span {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.trend-list strong {
+  color: var(--accent-2);
+}
+
+.admin-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.tab-btn {
+  width: auto;
+  border-radius: 999px;
+  padding: 0.5rem 0.8rem;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--ink);
+  border: 1px solid var(--line);
+}
+
+.tab-btn.active {
+  background: linear-gradient(135deg, var(--accent), #1292ff);
+  color: #01121f;
+}
+
+.tab-panel {
+  display: grid;
+  gap: 1rem;
+}
+
+.toolbar-inline {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.blocked-section {
+  opacity: 0.46;
+  filter: grayscale(0.25);
+}
+
+.ticket-response-box {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.ticket-response-box textarea {
+  min-width: 240px;
+}
+
+@media (min-width: 760px) {
+  .admin-top-actions {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    align-items: center;
+  }
+
+  .analytics-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .toolbar-inline {
+    grid-template-columns: minmax(260px, 1fr) auto auto;
+    align-items: center;
+  }
+}

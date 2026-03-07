@@ -45,6 +45,14 @@ Passos:
 
 Enquanto SMTP nao estiver valido, a API retorna `dev_code` (se `SHOW_DEV_CODE=true`) para teste local.
 
+### Timeout de e-mail (performance)
+
+Para evitar travamento no cadastro quando o SMTP demora:
+- `SMTP_CONNECTION_TIMEOUT_MS` (padrao: 4000)
+- `SMTP_GREETING_TIMEOUT_MS` (padrao: 4000)
+- `SMTP_SOCKET_TIMEOUT_MS` (padrao: 8000)
+- `SMTP_SEND_TIMEOUT_MS` (padrao: 5000)
+
 ## Fluxos principais
 
 - Cadastro:

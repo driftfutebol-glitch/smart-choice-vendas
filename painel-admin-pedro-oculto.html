@@ -11,12 +11,15 @@
 </head>
 <body>
   <main class="admin-wrap">
-    <section class="panel">
-      <div class="admin-title"><img class="admin-brand-logo" src="assets/logos/scv-logo-neon.svg" alt="Smart Choice Vendas" /><h1>Painel oculto - Smart Choice Vendas</h1></div>
-      <p>Acesso exclusivo do dono/admin.</p>
+    <section class="panel" id="loginPanel">
+      <div class="admin-title">
+        <img class="admin-brand-logo" src="assets/logos/scv-logo-neon.svg" alt="Smart Choice Vendas" />
+        <h1>Painel oculto Smart Choice Vendas</h1>
+      </div>
+      <p>Acesso exclusivo do dono e administradores autorizados.</p>
 
       <form id="adminLoginForm" class="stack">
-        <label>Usuario (nome/email/telefone)
+        <label>Usuário (nome/email/telefone)
           <input type="text" name="identifier" placeholder="pedro dono" required />
         </label>
         <label>Senha
@@ -28,136 +31,210 @@
     </section>
 
     <section id="adminApp" class="hidden">
-      <div class="kpis">
-        <article><h3>Vendas aprovadas</h3><p id="kpiSales">0</p></article>
+      <header class="panel admin-top">
+        <div class="admin-top-main">
+          <h2>God Mode Control Center</h2>
+          <p id="adminIdentity">Administrador conectado</p>
+          <small id="adminPermissionSummary">Permissões carregando...</small>
+        </div>
+        <div class="admin-top-actions">
+          <label class="inline-check">
+            <input id="autoRefreshToggle" type="checkbox" />
+            Auto atualizar (60s)
+          </label>
+          <button id="refreshAllBtn" type="button">Atualizar dados</button>
+          <button id="logoutAdminBtn" type="button" class="danger">Sair</button>
+        </div>
+      </header>
+
+      <section class="kpis">
+        <article><h3>Vendas aprovadas</h3><p id="kpiSales">R$ 0,00</p></article>
         <article><h3>Pedidos aprovados</h3><p id="kpiOrders">0</p></article>
         <article><h3>Visitantes (14 dias)</h3><p id="kpiVisitors">0</p></article>
-      </div>
-
-      <section class="panel">
-        <h2>Criar Usuario / Admin</h2>
-        <form id="createUserForm" class="inline-grid">
-          <input type="text" name="name" placeholder="Nome" required />
-          <input type="email" name="email" placeholder="E-mail" required />
-          <input type="text" name="phone" placeholder="Telefone" required />
-          <input type="text" name="password" placeholder="Senha inicial" required />
-          <select name="role">
-            <option value="USER">USER</option>
-            <option value="ADMIN">ADMIN</option>
-          </select>
-          <select name="status_usuario">
-            <option value="ATIVO">ATIVO</option>
-            <option value="PENDING">PENDING</option>
-            <option value="INATIVO">INATIVO</option>
-          </select>
-          <input type="number" name="initialCredits" placeholder="Creditos iniciais" value="0" />
-          <button type="submit">Criar usuario</button>
-        </form>
-        <small id="createUserFeedback"></small>
       </section>
 
-      <section class="panel">
-        <h2>Permissoes de Admin (dar / retirar)</h2>
-        <form id="permissionsForm" class="stack">
-          <div class="inline-grid">
-            <input type="number" name="targetAdminId" placeholder="ID do admin" required />
-            <button type="button" id="loadAdminPermissionsBtn">Carregar permissoes atuais</button>
-            <button type="submit">Salvar permissoes</button>
+      <section class="panel analytics-grid">
+        <article>
+          <h3>Visitantes por dia</h3>
+          <ul id="visitorsTrend" class="trend-list"></ul>
+        </article>
+        <article>
+          <h3>Novos cadastros por dia</h3>
+          <ul id="signupsTrend" class="trend-list"></ul>
+        </article>
+      </section>
+
+      <nav class="admin-tabs">
+        <button type="button" class="tab-btn active" data-tab-target="tab-dashboard">Dashboard</button>
+        <button type="button" class="tab-btn" data-tab-target="tab-users">Usuários</button>
+        <button type="button" class="tab-btn" data-tab-target="tab-products">Produtos</button>
+        <button type="button" class="tab-btn" data-tab-target="tab-orders">Pedidos</button>
+        <button type="button" class="tab-btn" data-tab-target="tab-support">Suporte</button>
+        <button type="button" class="tab-btn" data-tab-target="tab-audit">Auditoria</button>
+      </nav>
+
+      <section id="tab-dashboard" class="tab-panel">
+        <section class="panel" data-permission-gate="CREDITS_ADJUST">
+          <h2>Controle de Créditos (Master Key)</h2>
+          <form id="creditForm" class="inline-grid">
+            <input type="number" name="userId" placeholder="ID usuário" required />
+            <input type="number" name="delta" placeholder="+/- créditos" required />
+            <input type="text" name="reason" placeholder="Motivo" required />
+            <input type="password" name="masterKey" placeholder="Master Key 03142911" required />
+            <button type="submit">Aplicar ajuste</button>
+          </form>
+          <small id="creditFeedback"></small>
+        </section>
+
+        <section class="panel" data-permission-gate="NOTIFICATIONS_MANAGE">
+          <h2>Notificações para Clientes</h2>
+          <form id="notificationForm" class="inline-grid">
+            <input type="number" name="userId" placeholder="ID usuário (vazio = todos)" />
+            <input type="text" name="title" placeholder="Título" />
+            <input type="text" name="message" placeholder="Mensagem" required />
+            <button type="submit">Enviar notificação</button>
+          </form>
+          <small id="notificationFeedback"></small>
+        </section>
+      </section>
+
+      <section id="tab-users" class="tab-panel hidden">
+        <section class="panel" data-permission-gate="USERS_CREATE">
+          <h2>Criar Usuário / Admin</h2>
+          <form id="createUserForm" class="inline-grid">
+            <input type="text" name="name" placeholder="Nome" required />
+            <input type="email" name="email" placeholder="E-mail" required />
+            <input type="text" name="phone" placeholder="Telefone (opcional)" />
+            <input type="text" name="password" placeholder="Senha inicial forte" required />
+            <select name="role">
+              <option value="USER">USER</option>
+              <option value="ADMIN">ADMIN</option>
+            </select>
+            <select name="status_usuario">
+              <option value="ATIVO">ATIVO</option>
+              <option value="PENDING">PENDING</option>
+              <option value="INATIVO">INATIVO</option>
+            </select>
+            <input type="number" name="initialCredits" placeholder="Créditos iniciais" value="0" />
+            <button type="submit">Criar usuário</button>
+          </form>
+          <small id="createUserFeedback"></small>
+        </section>
+
+        <section class="panel" data-permission-gate="USERS_PERMISSIONS">
+          <h2>Permissões de Admin (dar / retirar)</h2>
+          <form id="permissionsForm" class="stack">
+            <div class="inline-grid">
+              <input type="number" name="targetAdminId" placeholder="ID do admin" required />
+              <button type="button" id="loadAdminPermissionsBtn">Carregar permissões</button>
+              <button type="submit">Salvar permissões</button>
+            </div>
+            <div id="permissionOptions" class="permission-grid"></div>
+          </form>
+          <small id="permissionsFeedback"></small>
+        </section>
+
+        <section class="panel" data-permission-gate="USERS_PASSWORD_RESET">
+          <h2>Reset de Senha de Usuário</h2>
+          <form id="passwordResetForm" class="inline-grid">
+            <input type="number" name="userId" placeholder="ID usuário" required />
+            <input type="text" name="newPassword" placeholder="Nova senha forte" required />
+            <input type="password" name="masterKey" placeholder="Master Key" required />
+            <button type="submit">Redefinir senha</button>
+          </form>
+          <small id="passwordResetFeedback"></small>
+        </section>
+
+        <section class="panel">
+          <h2>Usuários</h2>
+          <div class="toolbar-inline">
+            <input id="usersSearchInput" type="search" placeholder="Buscar por nome, e-mail ou ID" />
+            <label class="inline-check"><input id="onlyAdminsToggle" type="checkbox" /> Só admins</label>
+            <label class="inline-check"><input id="onlyBannedToggle" type="checkbox" /> Só banidos</label>
           </div>
-          <div id="permissionOptions" class="permission-grid"></div>
-        </form>
-        <small id="permissionsFeedback"></small>
+          <div id="usersList" class="table-wrap"></div>
+        </section>
       </section>
 
-      <section class="panel">
-        <h2>Controle de Creditos (Master Key)</h2>
-        <form id="creditForm" class="inline-grid">
-          <input type="number" name="userId" placeholder="ID usuario" required />
-          <input type="number" name="delta" placeholder="+/- creditos" required />
-          <input type="text" name="reason" placeholder="Motivo" required />
-          <input type="password" name="masterKey" placeholder="Master Key 03142911" required />
-          <button type="submit">Aplicar ajuste</button>
-        </form>
-        <small id="creditFeedback"></small>
+      <section id="tab-products" class="tab-panel hidden">
+        <section class="panel" data-permission-gate="DISCOUNTS_MANAGE">
+          <h2>Descontos e Promoções</h2>
+          <form id="discountForm" class="inline-grid">
+            <input type="number" name="productId" placeholder="ID produto" required />
+            <input type="number" name="discountPercent" placeholder="Desconto %" required />
+            <label class="inline-check">
+              <input type="checkbox" name="beginnerOnly" />
+              Somente iniciantes
+            </label>
+            <button type="submit">Aplicar desconto</button>
+            <button type="button" id="clearDiscountBtn">Remover desconto</button>
+          </form>
+          <small id="discountFeedback"></small>
+        </section>
+
+        <section class="panel" data-permission-gate="PRODUCTS_MANAGE">
+          <h2>Cadastrar / Editar Produtos</h2>
+          <form id="productCreateForm" class="inline-grid">
+            <input type="hidden" name="productId" />
+            <input type="text" name="title" placeholder="Título" required />
+            <input type="text" name="brand" placeholder="Marca" required />
+            <select name="category">
+              <option value="CELULAR">CELULAR</option>
+              <option value="ACESSORIO">ACESSÓRIO</option>
+            </select>
+            <input type="text" name="description" placeholder="Descrição" required />
+            <input type="text" name="technical_specs" placeholder="Specs técnicas" />
+            <input type="number" name="price_cash" placeholder="Preço R$" required />
+            <input type="number" name="price_credits" placeholder="Preço créditos" required />
+            <input type="number" name="beginner_price" placeholder="Preço iniciante" />
+            <input type="text" name="image_url" placeholder="URL imagem" />
+            <input type="text" name="video_url" placeholder="URL vídeo" />
+            <input type="number" name="stock" placeholder="Estoque" required />
+            <label class="inline-check">
+              <input type="checkbox" name="is_beginner_offer" />
+              Oferta iniciante
+            </label>
+            <button id="productSubmitBtn" type="submit">Salvar produto</button>
+            <button id="cancelProductEditBtn" type="button">Cancelar edição</button>
+          </form>
+          <small id="productFeedback"></small>
+        </section>
+
+        <section class="panel">
+          <h2>Produtos cadastrados</h2>
+          <div class="toolbar-inline">
+            <input id="productsSearchInput" type="search" placeholder="Buscar por título, marca ou ID" />
+            <label class="inline-check"><input id="onlyActiveProductsToggle" type="checkbox" checked /> Só ativos</label>
+          </div>
+          <div id="productsList" class="table-wrap"></div>
+        </section>
       </section>
 
-      <section class="panel">
-        <h2>Reset de Senha de Usuario</h2>
-        <form id="passwordResetForm" class="inline-grid">
-          <input type="number" name="userId" placeholder="ID usuario" required />
-          <input type="text" name="newPassword" placeholder="Nova senha" required />
-          <input type="password" name="masterKey" placeholder="Master Key" required />
-          <button type="submit">Redefinir senha</button>
-        </form>
-        <small id="passwordResetFeedback"></small>
+      <section id="tab-orders" class="tab-panel hidden">
+        <section class="panel">
+          <h2>Pedidos (aprovar compra e liberar créditos)</h2>
+          <div id="ordersList" class="table-wrap"></div>
+        </section>
       </section>
 
-      <section class="panel">
-        <h2>Notificacoes para Clientes</h2>
-        <form id="notificationForm" class="inline-grid">
-          <input type="number" name="userId" placeholder="ID usuario (vazio = todos)" />
-          <input type="text" name="title" placeholder="Titulo" />
-          <input type="text" name="message" placeholder="Mensagem" required />
-          <button type="submit">Enviar notificacao</button>
-        </form>
-        <small id="notificationFeedback"></small>
+      <section id="tab-support" class="tab-panel hidden">
+        <section class="panel">
+          <h2>Tickets (IA para Humano)</h2>
+          <div class="toolbar-inline">
+            <label class="inline-check"><input id="onlyOpenTicketsToggle" type="checkbox" checked /> Só abertos</label>
+          </div>
+          <div id="ticketsList" class="table-wrap"></div>
+        </section>
       </section>
 
-      <section class="panel">
-        <h2>Descontos e Promocoes</h2>
-        <form id="discountForm" class="inline-grid">
-          <input type="number" name="productId" placeholder="ID produto" required />
-          <input type="number" name="discountPercent" placeholder="Desconto %" required />
-          <label class="inline-check">
-            <input type="checkbox" name="beginnerOnly" />
-            Somente iniciantes
-          </label>
-          <button type="submit">Aplicar desconto</button>
-        </form>
-        <small id="discountFeedback"></small>
-      </section>
-
-      <section class="panel">
-        <h2>Cadastrar/Editar Produtos</h2>
-        <form id="productCreateForm" class="inline-grid">
-          <input type="text" name="title" placeholder="Titulo" required />
-          <input type="text" name="brand" placeholder="Marca" required />
-          <select name="category"><option value="CELULAR">CELULAR</option><option value="ACESSORIO">ACESSORIO</option></select>
-          <input type="text" name="description" placeholder="Descricao" required />
-          <input type="text" name="technical_specs" placeholder="Specs" />
-          <input type="number" name="price_cash" placeholder="Preco R$" required />
-          <input type="number" name="price_credits" placeholder="Preco creditos" required />
-          <input type="number" name="beginner_price" placeholder="Preco iniciante" />
-          <input type="text" name="image_url" placeholder="URL imagem" />
-          <input type="text" name="video_url" placeholder="URL video" />
-          <input type="number" name="stock" placeholder="Estoque" required />
-          <label class="inline-check">
-            <input type="checkbox" name="is_beginner_offer" />
-            Oferta iniciante
-          </label>
-          <button type="submit">Adicionar produto</button>
-        </form>
-        <small id="productFeedback"></small>
-      </section>
-
-      <section class="panel">
-        <h2>Pedidos (aprovar compra e liberar creditos)</h2>
-        <div id="ordersList" class="table-wrap"></div>
-      </section>
-
-      <section class="panel">
-        <h2>Tickets (IA -> Humano)</h2>
-        <div id="ticketsList" class="table-wrap"></div>
-      </section>
-
-      <section class="panel">
-        <h2>Usuarios</h2>
-        <div id="usersList" class="table-wrap"></div>
-      </section>
-
-      <section class="panel">
-        <h2>Logs</h2>
-        <div id="logsList" class="table-wrap"></div>
+      <section id="tab-audit" class="tab-panel hidden">
+        <section class="panel">
+          <h2>Logs de atividade</h2>
+          <div class="toolbar-inline">
+            <input id="logsSearchInput" type="search" placeholder="Filtrar ação, detalhes ou ator" />
+          </div>
+          <div id="logsList" class="table-wrap"></div>
+        </section>
       </section>
     </section>
   </main>
@@ -165,7 +242,3 @@
   <script src="admin.js" defer></script>
 </body>
 </html>
-
-
-
-

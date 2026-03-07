@@ -1,6 +1,7 @@
 const nodemailer = require("nodemailer");
 
 let cachedTransporter = null;
+let cachedTransporterKey = "";
 
 function boolFromEnv(value, fallback = false) {
   if (value == null || value === "") {
@@ -26,19 +27,28 @@ function isMailConfigured(config) {
 }
 
 function getTransporter(config) {
-  if (cachedTransporter) {
+  const key = `${config.host}:${config.port}:${config.secure}:${config.user}`;
+  if (cachedTransporter && cachedTransporterKey === key) {
     return cachedTransporter;
   }
+
+  const connectionTimeoutMs = Number(process.env.SMTP_CONNECTION_TIMEOUT_MS || 4000);
+  const greetingTimeoutMs = Number(process.env.SMTP_GREETING_TIMEOUT_MS || 4000);
+  const socketTimeoutMs = Number(process.env.SMTP_SOCKET_TIMEOUT_MS || 8000);
 
   cachedTransporter = nodemailer.createTransport({
     host: config.host,
     port: config.port,
     secure: config.secure,
+    connectionTimeout: connectionTimeoutMs,
+    greetingTimeout: greetingTimeoutMs,
+    socketTimeout: socketTimeoutMs,
     auth: {
       user: config.user,
       pass: config.pass
     }
   });
+  cachedTransporterKey = key;
 
   return cachedTransporter;
 }
@@ -69,6 +79,14 @@ function mapSmtpError(error, config) {
     };
   }
 
+  if (code === "SMTP_TIMEOUT") {
+    return {
+      reason: "SMTP_TIMEOUT",
+      hint: "O servidor de e-mail demorou para responder. O sistema segue tentando enviar o codigo.",
+      detail
+    };
+  }
+
   return {
     reason: "SMTP_SEND_FAILED",
     detail
@@ -87,7 +105,7 @@ async function sendVerificationCodeEmail({ email, name, code }) {
 
   try {
     const transporter = getTransporter(config);
-    await transporter.sendMail({
+    const mailPromise = transporter.sendMail({
       from: config.from,
       to: email,
       subject: "Seu codigo de verificacao - Smart Choice Vendas",
@@ -102,6 +120,23 @@ async function sendVerificationCodeEmail({ email, name, code }) {
         </div>
       `
     });
+
+    const sendTimeoutMs = Number(process.env.SMTP_SEND_TIMEOUT_MS || 5000);
+    const raceResult = await Promise.race([
+      mailPromise.then(() => ({ ok: true })),
+      new Promise((resolve) => setTimeout(() => resolve({ ok: false, timeout: true }), sendTimeoutMs))
+    ]);
+
+    if (!raceResult.ok && raceResult.timeout) {
+      // Avoid unhandled rejection if SMTP fails after timeout.
+      mailPromise.catch(() => {});
+      return {
+        sent: false,
+        channel: "EMAIL",
+        reason: "SMTP_TIMEOUT",
+        hint: "Envio em andamento. Verifique sua caixa de entrada em instantes."
+      };
+    }
 
     return {
       sent: true,

@@ -45,6 +45,17 @@ Passos:
 
 Enquanto SMTP nao estiver valido, a API retorna `dev_code` (se `SHOW_DEV_CODE=true`) para teste local.
 
+### Plano B (Brevo API - recomendado em producao)
+
+Se SMTP estiver instavel no Render, use Brevo via API:
+- `EMAIL_PROVIDER=BREVO` (ou `AUTO`)
+- `BREVO_API_KEY=<sua_chave_brevo>`
+- `BREVO_FROM_EMAIL=<email_remetente_verificado_na_brevo>`
+- `BREVO_FROM_NAME=Smart Choice Vendas`
+- `BREVO_TIMEOUT_MS=5000`
+
+No modo `AUTO`, se Brevo estiver configurado ele e usado primeiro, com fallback para SMTP.
+
 ### Timeout de e-mail (performance)
 
 Para evitar travamento no cadastro quando o SMTP demora:

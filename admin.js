@@ -33,6 +33,7 @@ let usersCache = [];
 let productsCache = [];
 let ordersCache = [];
 let ticketsCache = [];
+let activeTicketChatId = null;
 let logsCache = [];
 let analyticsCache = { visitors: [], signups: [] };
 let autoRefreshInterval = null;
@@ -552,6 +553,7 @@ function renderTickets() {
           <td>${ticket.message}</td>
           <td>${ticket.status}</td>
           <td>
+            <button data-action="open-ticket-chat" data-id="${ticket.id}">Ver chat</button>
             ${responseField}
           </td>
         </tr>
@@ -563,6 +565,70 @@ function renderTickets() {
     ["Ticket", "Cliente", "Pedido", "Assunto", "Mensagem", "Status", "Ação"],
     rows
   );
+}
+
+function renderTicketChat(messages = []) {
+  const box = document.getElementById("ticketChatMessages");
+  const hint = document.getElementById("ticketChatHint");
+  if (!box || !hint) return;
+
+  if (!activeTicketChatId) {
+    box.innerHTML = "";
+    hint.textContent = "Selecione um ticket para ver o chat.";
+    return;
+  }
+
+  if (!messages.length) {
+    box.innerHTML = "<p class=\"muted\">Sem mensagens ainda.</p>";
+  } else {
+    box.innerHTML = messages
+      .map(
+        (m) =>
+          `<div class="chat-message ${m.sender_type === "ADMIN" ? "admin" : "user"}">
+            <strong>${m.sender_type === "ADMIN" ? "Admin" : "Cliente"}</strong>
+            <p>${m.body}</p>
+            <small>${m.created_at || ""}</small>
+          </div>`
+      )
+      .join("");
+  }
+
+  hint.textContent = `Chat do ticket #${activeTicketChatId}`;
+}
+
+async function loadTicketChat(ticketId) {
+  if (!hasPermission("TICKETS_MANAGE")) return;
+  activeTicketChatId = ticketId;
+  try {
+    const result = await apiRequest(`/admin/tickets/${ticketId}/messages`);
+    renderTicketChat(result.messages || []);
+    setFeedback("ticketChatFeedback", "", "");
+  } catch (error) {
+    setFeedback("ticketChatFeedback", error.message, "error");
+  }
+}
+
+async function sendTicketChat(event) {
+  event.preventDefault();
+  if (!activeTicketChatId) {
+    setFeedback("ticketChatFeedback", "Selecione um ticket primeiro.", "error");
+    return;
+  }
+
+  const input = document.querySelector("#ticketChatForm input[name='message']");
+  const message = String(input?.value || "").trim();
+  if (!message) return;
+
+  try {
+    await apiRequest(`/admin/tickets/${activeTicketChatId}/messages`, {
+      method: "POST",
+      body: JSON.stringify({ message })
+    });
+    if (input) input.value = "";
+    await loadTicketChat(activeTicketChatId);
+  } catch (error) {
+    setFeedback("ticketChatFeedback", error.message, "error");
+  }
 }
 
 async function loadTickets() {
@@ -922,6 +988,7 @@ function bindActions() {
   document.getElementById("notificationForm")?.addEventListener("submit", handleNotification);
   document.getElementById("discountForm")?.addEventListener("submit", handleDiscount);
   document.getElementById("productCreateForm")?.addEventListener("submit", handleProductSave);
+  document.getElementById("ticketChatForm")?.addEventListener("submit", sendTicketChat);
   document.getElementById("clearDiscountBtn")?.addEventListener("click", clearDiscount);
   document.getElementById("cancelProductEditBtn")?.addEventListener("click", resetProductForm);
 
@@ -967,6 +1034,13 @@ function bindActions() {
           method: "POST",
           body: JSON.stringify({ response })
         });
+        await loadTicketChat(id);
+      }
+
+      if (action === "open-ticket-chat") {
+        await loadTicketChat(id);
+        document.getElementById("ticketChatForm")?.scrollIntoView({ behavior: "smooth" });
+        return;
       }
 
       if (action === "toggle-role") {

@@ -345,6 +345,44 @@ td.actions button {
   min-width: 240px;
 }
 
+.chat-box {
+  background: #0f172a;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 12px;
+  min-height: 160px;
+  max-height: 260px;
+  overflow-y: auto;
+  display: grid;
+  gap: 10px;
+}
+
+.chat-message {
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: #111827;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  line-height: 1.35;
+}
+
+.chat-message.admin {
+  border-color: rgba(16, 185, 129, 0.6);
+}
+
+.chat-message.user {
+  border-color: rgba(59, 130, 246, 0.6);
+}
+
+.chat-input {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.chat-input input[type="text"] {
+  flex: 1;
+}
+
 @media (min-width: 760px) {
   .admin-top-actions {
     grid-template-columns: repeat(3, minmax(0, 1fr));

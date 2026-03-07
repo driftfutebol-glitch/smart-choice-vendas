@@ -745,6 +745,46 @@ small.success {
   color: var(--ink);
 }
 
+.chat-box {
+  background: #0f172a;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 14px;
+  padding: 12px;
+  max-height: 240px;
+  overflow-y: auto;
+  display: grid;
+  gap: 10px;
+}
+
+.chat-message {
+  padding: 10px;
+  border-radius: 10px;
+  font-size: 0.95rem;
+  line-height: 1.4;
+  background: #fff;
+  border: 1px solid var(--line);
+}
+
+.chat-message.user {
+  background: rgba(59, 130, 246, 0.12);
+  border-color: rgba(59, 130, 246, 0.4);
+}
+
+.chat-message.admin {
+  background: rgba(16, 185, 129, 0.14);
+  border-color: rgba(16, 185, 129, 0.4);
+}
+
+.chat-input {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.chat-input input[type="text"] {
+  flex: 1;
+}
+
 @media (min-width: 980px) {
   .checkout-layout {
     grid-template-columns: 1.1fr 0.9fr;

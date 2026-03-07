@@ -220,12 +220,25 @@
       <section id="tab-support" class="tab-panel hidden">
         <section class="panel">
           <h2>Tickets (IA para Humano)</h2>
-          <div class="toolbar-inline">
-            <label class="inline-check"><input id="onlyOpenTicketsToggle" type="checkbox" checked /> Só abertos</label>
+        <div class="toolbar-inline">
+          <label class="inline-check"><input id="onlyOpenTicketsToggle" type="checkbox" checked /> Só abertos</label>
+        </div>
+        <div id="ticketsList" class="table-wrap"></div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <h3>Chat do ticket selecionado</h3>
+            <p id="ticketChatHint" class="muted">Clique em "Ver chat" em um ticket para carregar as mensagens.</p>
           </div>
-          <div id="ticketsList" class="table-wrap"></div>
-        </section>
+          <div id="ticketChatMessages" class="chat-box admin-chat"></div>
+          <form id="ticketChatForm" class="chat-input">
+            <input type="text" name="message" placeholder="Responder cliente aqui" autocomplete="off" required />
+            <button class="btn btn-primary" type="submit">Enviar</button>
+          </form>
+          <small id="ticketChatFeedback"></small>
+        </div>
       </section>
+    </section>
 
       <section id="tab-audit" class="tab-panel hidden">
         <section class="panel">

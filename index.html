@@ -323,6 +323,19 @@
         <button class="btn btn-primary" type="submit">Enviar atendimento</button>
         <small id="supportPopupFeedback"></small>
       </form>
+
+      <div id="supportChatBox" class="stack hidden">
+        <div class="card-head">
+          <h4>Chat com atendimento</h4>
+          <p id="supportChatStatus" class="auth-tip"></p>
+        </div>
+        <div id="supportChatMessages" class="chat-box"></div>
+        <form id="supportChatForm" class="chat-input">
+          <input type="text" name="message" placeholder="Digite sua mensagem" autocomplete="off" required />
+          <button class="btn btn-primary" type="submit">Enviar</button>
+        </form>
+        <small id="supportChatFeedback"></small>
+      </div>
     </div>
   </div>
 

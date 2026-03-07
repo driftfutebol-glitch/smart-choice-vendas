@@ -114,6 +114,22 @@ function toInt(value, fallback = 0) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+async function loadTicketForAccess(db, ticketId, auth) {
+  const ticket = await db.get("SELECT id, user_id FROM tickets WHERE id = ?", [ticketId]);
+  if (!ticket) {
+    return { error: "Ticket nao encontrado", status: 404 };
+  }
+
+  const isAdmin = auth?.role === "ADMIN";
+  const isOwner = ticket.user_id && auth?.sub === ticket.user_id;
+
+  if (!isAdmin && !isOwner) {
+    return { error: "Sem acesso a este ticket", status: 403 };
+  }
+
+  return { ticket };
+}
+
 function isStrongPassword(password) {
   const candidate = String(password || "");
   // At least 8 chars with upper, lower, number and special char.
@@ -770,9 +786,14 @@ app.post("/api/support/triage", optionalAuth, async (req, res) => {
     const created = await db.run(
       `
         INSERT INTO tickets (user_id, name, order_number, subject, message, ai_attempted, ai_resolution)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
       `,
       [req.auth?.sub || null, name, orderNumber, subject, question, forceHuman ? 0 : 1, result.answer]
+    );
+
+    await db.run(
+      `INSERT INTO ticket_messages (ticket_id, sender_type, sender_id, body) VALUES (?, 'USER', ?, ?)`,
+      [created.lastID, req.auth?.sub || null, question]
     );
 
     return res.json({
@@ -783,6 +804,68 @@ app.post("/api/support/triage", optionalAuth, async (req, res) => {
     });
   } catch (error) {
     return res.status(500).json({ error: "Falha na triagem" });
+  }
+});
+
+app.get("/api/tickets/:id/messages", authRequired, async (req, res) => {
+  try {
+    const db = await getDb();
+    const ticketId = toInt(req.params.id);
+
+    const access = await loadTicketForAccess(db, ticketId, req.auth);
+    if (access.error) {
+      return res.status(access.status).json({ error: access.error });
+    }
+
+    const messages = await db.all(
+      `
+        SELECT id, ticket_id, sender_type, sender_id, body, created_at
+        FROM ticket_messages
+        WHERE ticket_id = ?
+        ORDER BY datetime(created_at) ASC, id ASC
+      `,
+      [ticketId]
+    );
+
+    return res.json({ ok: true, messages });
+  } catch (error) {
+    return res.status(500).json({ error: "Falha ao buscar mensagens do ticket" });
+  }
+});
+
+app.post("/api/tickets/:id/messages", authRequired, async (req, res) => {
+  try {
+    const db = await getDb();
+    const ticketId = toInt(req.params.id);
+    const body = String(req.body.message || "").trim();
+
+    if (!body) {
+      return res.status(400).json({ error: "Mensagem obrigatoria" });
+    }
+
+    const access = await loadTicketForAccess(db, ticketId, req.auth);
+    if (access.error) {
+      return res.status(access.status).json({ error: access.error });
+    }
+
+    const result = await db.run(
+      `INSERT INTO ticket_messages (ticket_id, sender_type, sender_id, body) VALUES (?, 'USER', ?, ?)`,
+      [ticketId, req.auth.sub, body]
+    );
+
+    return res.json({
+      ok: true,
+      message: {
+        id: result.lastID,
+        ticket_id: ticketId,
+        sender_type: "USER",
+        sender_id: req.auth.sub,
+        body,
+        created_at: new Date().toISOString()
+      }
+    });
+  } catch (error) {
+    return res.status(500).json({ error: "Falha ao enviar mensagem" });
   }
 });
 
@@ -1422,6 +1505,73 @@ app.get("/api/admin/tickets", authRequired, adminRequired, requireAdminPermissio
   }
 });
 
+app.get("/api/admin/tickets/:id/messages", authRequired, adminRequired, requireAdminPermission("TICKETS_MANAGE"), async (req, res) => {
+  try {
+    const db = await getDb();
+    const ticketId = toInt(req.params.id);
+
+    const access = await loadTicketForAccess(db, ticketId, req.auth);
+    if (access.error) {
+      return res.status(access.status).json({ error: access.error });
+    }
+
+    const messages = await db.all(
+      `
+        SELECT id, ticket_id, sender_type, sender_id, body, created_at
+        FROM ticket_messages
+        WHERE ticket_id = ?
+        ORDER BY datetime(created_at) ASC, id ASC
+      `,
+      [ticketId]
+    );
+
+    return res.json({ ok: true, messages });
+  } catch (error) {
+    return res.status(500).json({ error: "Falha ao listar mensagens" });
+  }
+});
+
+app.post("/api/admin/tickets/:id/messages", authRequired, adminRequired, requireAdminPermission("TICKETS_MANAGE"), async (req, res) => {
+  try {
+    const db = await getDb();
+    const ticketId = toInt(req.params.id);
+    const body = String(req.body.message || "").trim();
+
+    if (!body) {
+      return res.status(400).json({ error: "Mensagem obrigatoria" });
+    }
+
+    const access = await loadTicketForAccess(db, ticketId, req.auth);
+    if (access.error) {
+      return res.status(access.status).json({ error: access.error });
+    }
+
+    const result = await db.run(
+      `INSERT INTO ticket_messages (ticket_id, sender_type, sender_id, body) VALUES (?, 'ADMIN', ?, ?)`,
+      [ticketId, req.auth.sub, body]
+    );
+
+    await db.run("UPDATE tickets SET status = 'ANSWERED', responded_by = ?, responded_at = datetime('now') WHERE id = ?", [
+      req.auth.sub,
+      ticketId
+    ]);
+
+    return res.json({
+      ok: true,
+      message: {
+        id: result.lastID,
+        ticket_id: ticketId,
+        sender_type: "ADMIN",
+        sender_id: req.auth.sub,
+        body,
+        created_at: new Date().toISOString()
+      }
+    });
+  } catch (error) {
+    return res.status(500).json({ error: "Falha ao enviar mensagem como admin" });
+  }
+});
+
 app.post("/api/admin/tickets/:id/respond", authRequired, adminRequired, requireAdminPermission("TICKETS_MANAGE"), async (req, res) => {
   try {
     const db = await getDb();
@@ -1444,6 +1594,11 @@ app.post("/api/admin/tickets/:id/respond", authRequired, adminRequired, requireA
       WHERE id = ?
       `,
       [responseText, req.auth.sub, ticketId]
+    );
+
+    await db.run(
+      `INSERT INTO ticket_messages (ticket_id, sender_type, sender_id, body) VALUES (?, 'ADMIN', ?, ?)`,
+      [ticketId, req.auth.sub, responseText]
     );
 
     if (ticket.user_id) {

@@ -29,6 +29,8 @@ const API_BASE = resolveApiBase();
 let authToken = localStorage.getItem("scv_token") || "";
 let currentUser = null;
 let selectedBrand = "";
+let supportTicketId = Number(localStorage.getItem("scv_ticket_id") || 0);
+let supportChatTimer = null;
 
 const yearEl = document.getElementById("year");
 if (yearEl) {
@@ -163,6 +165,10 @@ function setupAuthModals() {
       }
     });
   });
+
+  if (supportTicketId) {
+    startSupportChat();
+  }
 }
 
 async function trackVisit() {
@@ -211,6 +217,7 @@ function logoutUser() {
   if (notificationsList) notificationsList.innerHTML = "";
 
   setFeedback("loginFeedback", "Você saiu da conta.", "success");
+  stopSupportChat();
 }
 
 function showWelcome(message) {
@@ -461,6 +468,9 @@ async function login(event) {
     localStorage.setItem("scv_token", authToken);
     toggleAuthOnly(true);
     setFeedback("loginFeedback", "Login realizado com sucesso.", "success");
+    if (supportTicketId) {
+      startSupportChat();
+    }
 
     closeModal("loginModal");
 
@@ -549,9 +559,99 @@ async function submitSupportPopup(event) {
       setFeedback("supportPopupFeedback", `IA respondeu: ${result.answer}`, "success");
     } else {
       setFeedback("supportPopupFeedback", `Ticket humano criado: #${result.ticketId}`, "success");
+      supportTicketId = Number(result.ticketId);
+      localStorage.setItem("scv_ticket_id", String(supportTicketId));
+      startSupportChat();
     }
   } catch (error) {
     setFeedback("supportPopupFeedback", error.message, "error");
+  }
+}
+
+function renderSupportMessages(messages = []) {
+  const box = document.getElementById("supportChatMessages");
+  if (!box) return;
+
+  if (!messages.length) {
+    box.innerHTML = "<p class=\"auth-tip\">Sem mensagens ainda.</p>";
+    return;
+  }
+
+  box.innerHTML = messages
+    .map(
+      (m) =>
+        `<div class="chat-message ${m.sender_type === "ADMIN" ? "admin" : "user"}">
+          <strong>${m.sender_type === "ADMIN" ? "Atendente" : "Você"}</strong>
+          <p>${m.body}</p>
+          <small>${m.created_at || ""}</small>
+        </div>`
+    )
+    .join("");
+}
+
+async function fetchSupportMessages() {
+  if (!supportTicketId || !authToken) return;
+  try {
+    const result = await apiRequest(`/tickets/${supportTicketId}/messages`);
+    renderSupportMessages(result.messages || []);
+    setFeedback("supportChatFeedback", "", "");
+  } catch (error) {
+    setFeedback("supportChatFeedback", error.message, "error");
+  }
+}
+
+function stopSupportChat() {
+  if (supportChatTimer) {
+    clearInterval(supportChatTimer);
+    supportChatTimer = null;
+  }
+}
+
+function startSupportChat() {
+  const box = document.getElementById("supportChatBox");
+  const status = document.getElementById("supportChatStatus");
+  if (!supportTicketId || !box) return;
+
+  box.classList.remove("hidden");
+  if (status) {
+    status.textContent = authToken
+      ? `Ticket #${supportTicketId} em atendimento humano.`
+      : "Para usar o chat, faça login e reabra este atendimento.";
+  }
+
+  stopSupportChat();
+  if (authToken) {
+    fetchSupportMessages();
+    supportChatTimer = window.setInterval(fetchSupportMessages, 5000);
+  }
+}
+
+async function sendSupportChat(event) {
+  event.preventDefault();
+  if (!supportTicketId) {
+    setFeedback("supportChatFeedback", "Abra um ticket primeiro.", "error");
+    return;
+  }
+
+  if (!authToken) {
+    setFeedback("supportChatFeedback", "Entre na conta para enviar mensagem.", "error");
+    openModal("loginModal");
+    return;
+  }
+
+  const input = document.querySelector("#supportChatForm input[name='message']");
+  const message = String(input?.value || "").trim();
+  if (!message) return;
+
+  try {
+    await apiRequest(`/tickets/${supportTicketId}/messages`, {
+      method: "POST",
+      body: JSON.stringify({ message })
+    });
+    if (input) input.value = "";
+    await fetchSupportMessages();
+  } catch (error) {
+    setFeedback("supportChatFeedback", error.message, "error");
   }
 }
 
@@ -586,6 +686,7 @@ function bindEvents() {
   document.getElementById("loginForm")?.addEventListener("submit", login);
   document.getElementById("triageForm")?.addEventListener("submit", submitTriage);
   document.getElementById("supportPopupForm")?.addEventListener("submit", submitSupportPopup);
+  document.getElementById("supportChatForm")?.addEventListener("submit", sendSupportChat);
   document.getElementById("partnerForm")?.addEventListener("submit", submitPartner);
 
   document.querySelectorAll(".chip").forEach((chip) => {

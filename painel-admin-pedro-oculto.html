@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Painel Admin | Smart Choice Vendas</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700&family=Outfit:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="admin.css" />
+</head>
+<body>
+  <main class="admin-wrap">
+    <section class="panel">
+      <div class="admin-title"><img class="admin-brand-logo" src="assets/logos/scv-logo-neon.svg" alt="Smart Choice Vendas" /><h1>Painel oculto - Smart Choice Vendas</h1></div>
+      <p>Acesso exclusivo do dono/admin.</p>
+
+      <form id="adminLoginForm" class="stack">
+        <label>Usuario (nome/email/telefone)
+          <input type="text" name="identifier" placeholder="pedro dono" required />
+        </label>
+        <label>Senha
+          <input type="password" name="password" required />
+        </label>
+        <button type="submit">Entrar no painel</button>
+        <small id="adminLoginFeedback"></small>
+      </form>
+    </section>
+
+    <section id="adminApp" class="hidden">
+      <div class="kpis">
+        <article><h3>Vendas aprovadas</h3><p id="kpiSales">0</p></article>
+        <article><h3>Pedidos aprovados</h3><p id="kpiOrders">0</p></article>
+        <article><h3>Visitantes (14 dias)</h3><p id="kpiVisitors">0</p></article>
+      </div>
+
+      <section class="panel">
+        <h2>Criar Usuario / Admin</h2>
+        <form id="createUserForm" class="inline-grid">
+          <input type="text" name="name" placeholder="Nome" required />
+          <input type="email" name="email" placeholder="E-mail" required />
+          <input type="text" name="phone" placeholder="Telefone" required />
+          <input type="text" name="password" placeholder="Senha inicial" required />
+          <select name="role">
+            <option value="USER">USER</option>
+            <option value="ADMIN">ADMIN</option>
+          </select>
+          <select name="status_usuario">
+            <option value="ATIVO">ATIVO</option>
+            <option value="PENDING">PENDING</option>
+            <option value="INATIVO">INATIVO</option>
+          </select>
+          <input type="number" name="initialCredits" placeholder="Creditos iniciais" value="0" />
+          <button type="submit">Criar usuario</button>
+        </form>
+        <small id="createUserFeedback"></small>
+      </section>
+
+      <section class="panel">
+        <h2>Permissoes de Admin (dar / retirar)</h2>
+        <form id="permissionsForm" class="stack">
+          <div class="inline-grid">
+            <input type="number" name="targetAdminId" placeholder="ID do admin" required />
+            <button type="button" id="loadAdminPermissionsBtn">Carregar permissoes atuais</button>
+            <button type="submit">Salvar permissoes</button>
+          </div>
+          <div id="permissionOptions" class="permission-grid"></div>
+        </form>
+        <small id="permissionsFeedback"></small>
+      </section>
+
+      <section class="panel">
+        <h2>Controle de Creditos (Master Key)</h2>
+        <form id="creditForm" class="inline-grid">
+          <input type="number" name="userId" placeholder="ID usuario" required />
+          <input type="number" name="delta" placeholder="+/- creditos" required />
+          <input type="text" name="reason" placeholder="Motivo" required />
+          <input type="password" name="masterKey" placeholder="Master Key 03142911" required />
+          <button type="submit">Aplicar ajuste</button>
+        </form>
+        <small id="creditFeedback"></small>
+      </section>
+
+      <section class="panel">
+        <h2>Reset de Senha de Usuario</h2>
+        <form id="passwordResetForm" class="inline-grid">
+          <input type="number" name="userId" placeholder="ID usuario" required />
+          <input type="text" name="newPassword" placeholder="Nova senha" required />
+          <input type="password" name="masterKey" placeholder="Master Key" required />
+          <button type="submit">Redefinir senha</button>
+        </form>
+        <small id="passwordResetFeedback"></small>
+      </section>
+
+      <section class="panel">
+        <h2>Notificacoes para Clientes</h2>
+        <form id="notificationForm" class="inline-grid">
+          <input type="number" name="userId" placeholder="ID usuario (vazio = todos)" />
+          <input type="text" name="title" placeholder="Titulo" />
+          <input type="text" name="message" placeholder="Mensagem" required />
+          <button type="submit">Enviar notificacao</button>
+        </form>
+        <small id="notificationFeedback"></small>
+      </section>
+
+      <section class="panel">
+        <h2>Descontos e Promocoes</h2>
+        <form id="discountForm" class="inline-grid">
+          <input type="number" name="productId" placeholder="ID produto" required />
+          <input type="number" name="discountPercent" placeholder="Desconto %" required />
+          <label class="inline-check">
+            <input type="checkbox" name="beginnerOnly" />
+            Somente iniciantes
+          </label>
+          <button type="submit">Aplicar desconto</button>
+        </form>
+        <small id="discountFeedback"></small>
+      </section>
+
+      <section class="panel">
+        <h2>Cadastrar/Editar Produtos</h2>
+        <form id="productCreateForm" class="inline-grid">
+          <input type="text" name="title" placeholder="Titulo" required />
+          <input type="text" name="brand" placeholder="Marca" required />
+          <select name="category"><option value="CELULAR">CELULAR</option><option value="ACESSORIO">ACESSORIO</option></select>
+          <input type="text" name="description" placeholder="Descricao" required />
+          <input type="text" name="technical_specs" placeholder="Specs" />
+          <input type="number" name="price_cash" placeholder="Preco R$" required />
+          <input type="number" name="price_credits" placeholder="Preco creditos" required />
+          <input type="number" name="beginner_price" placeholder="Preco iniciante" />
+          <input type="text" name="image_url" placeholder="URL imagem" />
+          <input type="text" name="video_url" placeholder="URL video" />
+          <input type="number" name="stock" placeholder="Estoque" required />
+          <label class="inline-check">
+            <input type="checkbox" name="is_beginner_offer" />
+            Oferta iniciante
+          </label>
+          <button type="submit">Adicionar produto</button>
+        </form>
+        <small id="productFeedback"></small>
+      </section>
+
+      <section class="panel">
+        <h2>Pedidos (aprovar compra e liberar creditos)</h2>
+        <div id="ordersList" class="table-wrap"></div>
+      </section>
+
+      <section class="panel">
+        <h2>Tickets (IA -> Humano)</h2>
+        <div id="ticketsList" class="table-wrap"></div>
+      </section>
+
+      <section class="panel">
+        <h2>Usuarios</h2>
+        <div id="usersList" class="table-wrap"></div>
+      </section>
+
+      <section class="panel">
+        <h2>Logs</h2>
+        <div id="logsList" class="table-wrap"></div>
+      </section>
+    </section>
+  </main>
+
+  <script src="admin.js" defer></script>
+</body>
+</html>
+
+
+
+

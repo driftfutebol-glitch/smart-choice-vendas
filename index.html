@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Smart Choice Vendas | Tecnologia que Conecta</title>
+  <meta name="description" content="Smart Choice Vendas: celulares Redmi, Xiaomi, Realme, iPhone e Samsung com visual tecnológico, promoções para iniciantes e sistema de créditos." />
+  <meta name="keywords" content="celulares redmi xiaomi realme iphone samsung, troca por créditos, promoções tecnologia" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700&family=Rajdhani:wght@400;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="noise" aria-hidden="true"></div>
+  <div class="glow glow-a" aria-hidden="true"></div>
+  <div class="glow glow-b" aria-hidden="true"></div>
+
+  <header class="topbar">
+    <a class="brand" href="#top"><img class="brand-logo" src="assets/logos/scv-logo-primary.svg" alt="Smart Choice Vendas" /></a>
+    <nav class="menu">
+      <a href="#home">Início</a>
+      <a href="#auth">Acesso</a>
+      <a href="#loja">Loja</a>
+      <a href="#creditos">Créditos</a>
+      <a href="troca-creditos.html">Troca</a>
+      <a href="#suporte">Suporte</a>
+      <a href="#parceiros">Parceiros</a>
+      <a href="#faq">FAQ</a>
+    </nav>
+  </header>
+
+  <main id="top" class="container">
+    <section id="home" class="hero reveal">
+      <div class="hero-content">
+        <p class="eyebrow">@SMARTCHOICEVENDAS | WHATSAPP 66 8433-0286</p>
+        <h1>Seu novo celular começa aqui: mais tecnologia, mais estilo, mais vantagem.</h1>
+        <p class="hero-copy">Redmi, Xiaomi, Realme, iPhone e Samsung em uma vitrine vibrante com promoções para novos usuários, programa de créditos e troca inteligente.</p>
+        <div class="hero-actions">
+          <a class="btn btn-primary" href="#loja">Ver ofertas agora</a>
+          <a class="btn btn-ghost" href="#auth">Criar conta e ganhar 50 créditos</a>
+        </div>
+      </div>
+      <div class="hero-gallery">
+        <img src="https://images.unsplash.com/photo-1610945265064-0e34e5519bbf?auto=format&fit=crop&w=900&q=80" alt="Smartphone premium em destaque" />
+        <img src="https://images.unsplash.com/photo-1580910051074-3eb694886505?auto=format&fit=crop&w=900&q=80" alt="Linha de celulares modernos" />
+        <img src="https://images.unsplash.com/photo-1565849904461-04a58ad377e0?auto=format&fit=crop&w=900&q=80" alt="Celular com câmera avançada" />
+      </div>
+    </section>
+
+    <section class="tech-strip reveal">
+      <article>
+        <h3>Visual Tecnológico</h3>
+        <p>Interface moderna com identidade forte e foco mobile.</p>
+      </article>
+      <article>
+        <h3>Promoção Iniciante</h3>
+        <p>Descontos especiais para contas novas no site.</p>
+      </article>
+      <article>
+        <h3>Troca por Créditos</h3>
+        <p>Compre sem dinheiro quando seu saldo permitir.</p>
+      </article>
+    </section>
+
+    <section class="brand-showcase reveal">
+      <h2>Marcas que você procura</h2>
+      <div class="brands-grid">
+        <article><span>Xiaomi</span><img src="https://images.unsplash.com/photo-1610945415295-d9bbf067e59c?auto=format&fit=crop&w=900&q=70" alt="Xiaomi" /></article>
+        <article><span>Redmi</span><img src="https://images.unsplash.com/photo-1610792516307-ea5acd9c3b00?auto=format&fit=crop&w=900&q=70" alt="Redmi" /></article>
+        <article><span>Realme</span><img src="https://images.unsplash.com/photo-1598327105666-5b89351aff97?auto=format&fit=crop&w=900&q=70" alt="Realme" /></article>
+        <article><span>iPhone</span><img src="https://images.unsplash.com/photo-1678652197831-2d180705cd2c?auto=format&fit=crop&w=900&q=70" alt="iPhone" /></article>
+        <article><span>Samsung</span><img src="https://images.unsplash.com/photo-1610945264803-c22b62d2a7b3?auto=format&fit=crop&w=900&q=70" alt="Samsung" /></article>
+      </div>
+    </section>
+
+    <section id="auth" class="card reveal">
+      <div class="card-head">
+        <h2>Cadastro e Login</h2>
+        <p>Agora em popups separados para ficar mais rápido e organizado.</p>
+      </div>
+
+      <div class="auth-actions">
+        <button id="openRegisterModal" class="btn btn-primary" type="button">Abrir cadastro</button>
+        <button id="openLoginModal" class="btn btn-ghost" type="button">Abrir login</button>
+      </div>
+
+      <small class="auth-tip">Dica: novos usuários ganham 50 créditos ao validar o cadastro.</small>
+    </section>
+
+    <section id="creditos" class="card reveal hidden" data-auth-only>
+      <div class="card-head">
+        <h2>Carteira de Créditos</h2>
+        <p>Bônus de 50 créditos no cadastro + extrato e notificações.</p>
+      </div>
+
+      <div class="wallet-bar">
+        <div>
+          <span>Saldo atual</span>
+          <strong id="walletCredits">0</strong>
+        </div>
+        <div>
+          <span>Usuário</span>
+          <strong id="walletUser">-</strong>
+        </div>
+      </div>
+
+      <div class="grid-two">
+        <article>
+          <h3>Extrato de créditos</h3>
+          <ul id="transactionsList" class="list"></ul>
+        </article>
+        <article>
+          <h3>Notificações</h3>
+          <ul id="notificationsList" class="list"></ul>
+        </article>
+      </div>
+    </section>
+
+    <section id="loja" class="card reveal">
+      <div class="card-head">
+        <h2>Loja e Promoções</h2>
+        <p>Filtros por marca, preços em dinheiro e opção de troca por créditos.</p>
+      </div>
+
+      <div class="filters">
+        <button class="chip active" data-brand="">Todas</button>
+        <button class="chip" data-brand="Xiaomi">Xiaomi</button>
+        <button class="chip" data-brand="Redmi">Redmi</button>
+        <button class="chip" data-brand="Realme">Realme</button>
+        <button class="chip" data-brand="iPhone">iPhone</button>
+        <button class="chip" data-brand="Samsung">Samsung</button>
+        <label class="inline-check">
+          <input id="onlyBeginner" type="checkbox" />
+          Somente promoção iniciante
+        </label>
+      </div>
+
+      <div id="productsGrid" class="products-grid"></div>
+    </section>
+
+    <section id="suporte" class="card reveal">
+      <div class="card-head">
+        <h2>Suporte Inteligente</h2>
+        <p>IA consulta FAQ e, se necessário, cria ticket para atendimento humano no painel admin.</p>
+      </div>
+
+      <form id="triageForm" class="stack">
+        <label>Nome
+          <input type="text" name="name" required />
+        </label>
+        <label>Número do pedido
+          <input type="text" name="orderNumber" required />
+        </label>
+        <label>Assunto
+          <input type="text" name="subject" required />
+        </label>
+        <label>Dúvida
+          <textarea name="question" rows="4" required></textarea>
+        </label>
+        <button class="btn btn-primary" type="submit">Enviar para triagem IA</button>
+        <small id="triageFeedback"></small>
+      </form>
+    </section>
+
+    <section id="parceiros" class="card reveal">
+      <div class="card-head">
+        <h2>Seja Parceiro Revendedor</h2>
+        <p>Parceiros aprovados recebem 100 créditos por mês.</p>
+      </div>
+
+      <form id="partnerForm" class="stack" data-auth-only>
+        <label>Documento
+          <select name="docType" required>
+            <option value="CPF">CPF</option>
+            <option value="CNPJ">CNPJ</option>
+          </select>
+        </label>
+        <label>Número do documento
+          <input type="text" name="docValue" required />
+        </label>
+        <label>Região de atuação
+          <input type="text" name="region" required />
+        </label>
+        <button class="btn btn-primary" type="submit">Enviar dados</button>
+        <small id="partnerFeedback"></small>
+      </form>
+
+      <div class="partner-box hidden" id="partnerDashboard" data-auth-only>
+        <h3>Dashboard de Parceiro</h3>
+        <p id="partnerStatus">Status: aguardando</p>
+        <p id="partnerGoal">Meta: 0/0</p>
+      </div>
+    </section>
+
+    <section id="faq" class="card reveal">
+      <div class="card-head">
+        <h2>FAQ, Política de Reembolso e Garantia</h2>
+        <p>Informações rápidas para confiança de compra.</p>
+      </div>
+      <div class="grid-two">
+        <article>
+          <h3>Reembolso</h3>
+          <p>Solicitação em até 7 dias após recebimento conforme política da loja.</p>
+        </article>
+        <article>
+          <h3>Garantia</h3>
+          <p>Garantia legal + suporte técnico conforme o fabricante de cada aparelho.</p>
+        </article>
+      </div>
+    </section>
+    <section class="card reveal">
+      <div class="card-head">
+        <h2>Logotipos Smart Choice Vendas</h2>
+        <p>Variações criadas para usar no site, redes sociais e materiais de campanha.</p>
+      </div>
+      <div class="logo-variants">
+        <article><img src="assets/logos/scv-logo-primary.svg" alt="Logo principal Smart Choice Vendas" /></article>
+        <article><img src="assets/logos/scv-logo-neon.svg" alt="Logo neon Smart Choice Vendas" /></article>
+        <article><img src="assets/logos/scv-logo-shield.svg" alt="Logo escudo Smart Choice Vendas" /></article>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <p>&copy; <span id="year"></span> Smart Choice Vendas.</p>
+    <p class="sub">Contato: WhatsApp 66 8433-0286 | Instagram: @smartchoicevendas</p>
+  </footer>
+
+    <div id="registerModal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Cadastro">
+    <div class="modal-card auth-modal-card">
+      <div class="modal-head">
+        <h3>Criar conta</h3>
+        <button id="closeRegisterModal" class="btn btn-ghost" type="button">Fechar</button>
+      </div>
+
+      <form id="registerStartForm" class="stack">
+        <h4>Etapa 1: enviar código</h4>
+        <label>Nome
+          <input type="text" name="name" required />
+        </label>
+        <label>E-mail
+          <input type="email" name="email" required />
+        </label>
+        <label>Telefone (WhatsApp)
+          <input type="text" name="phone" required />
+        </label>
+        <button class="btn btn-primary" type="submit">Enviar código</button>
+        <small id="registerStartFeedback"></small>
+      </form>
+
+      <form id="registerCompleteForm" class="stack login-box">
+        <h4>Etapa 2: validar e ativar</h4>
+        <label>E-mail
+          <input type="email" name="email" required />
+        </label>
+        <label>Código de verificação
+          <input type="text" name="code" required />
+        </label>
+        <button id="resendCodeBtn" class="btn btn-ghost" type="button">Reenviar código</button>
+        <small id="resendCodeFeedback"></small>
+        <label>Senha
+          <input type="password" name="password" minlength="6" required />
+        </label>
+        <button class="btn btn-primary" type="submit">Ativar usuário</button>
+        <small id="registerCompleteFeedback"></small>
+      </form>
+    </div>
+  </div>
+
+  <div id="loginModal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Login">
+    <div class="modal-card auth-modal-card">
+      <div class="modal-head">
+        <h3>Entrar na conta</h3>
+        <button id="closeLoginModal" class="btn btn-ghost" type="button">Fechar</button>
+      </div>
+
+      <form id="loginForm" class="stack">
+        <label>E-mail, telefone ou nome
+          <input type="text" name="identifier" required />
+        </label>
+        <label>Senha
+          <input type="password" name="password" required />
+        </label>
+        <button class="btn btn-primary" type="submit">Entrar</button>
+        <small id="loginFeedback"></small>
+      </form>
+    </div>
+  </div>
+
+  <div id="welcomeModal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Boas-vindas">
+    <div class="modal-card">
+      <h3>Boas-vindas</h3>
+      <p id="welcomeText"></p>
+      <button id="closeWelcome" class="btn btn-primary" type="button">Continuar</button>
+    </div>
+  </div>
+
+  <script src="script.js" defer></script>
+</body>
+</html>
+
+
+
+
+

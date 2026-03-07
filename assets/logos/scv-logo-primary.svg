@@ -1,0 +1,17 @@
+<svg width="420" height="120" viewBox="0 0 420 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="g1" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#00D4FF"/>
+      <stop offset="100%" stop-color="#00F59A"/>
+    </linearGradient>
+    <linearGradient id="g2" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#FF6A00"/>
+      <stop offset="100%" stop-color="#FFC400"/>
+    </linearGradient>
+  </defs>
+  <rect x="8" y="16" width="90" height="90" rx="22" fill="#071A30"/>
+  <path d="M29 82V40h14l14 21 14-21h14v42H71V61L57 81 43 61v21H29Z" fill="url(#g1)"/>
+  <circle cx="83" cy="30" r="8" fill="url(#g2)"/>
+  <text x="116" y="55" font-size="28" font-family="Orbitron, Arial" font-weight="700" fill="#0E2240">SMART CHOICE</text>
+  <text x="116" y="84" font-size="24" font-family="Rajdhani, Arial" font-weight="700" fill="#00A5FF">VENDAS</text>
+</svg>

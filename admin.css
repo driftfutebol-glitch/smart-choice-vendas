@@ -1,0 +1,254 @@
+:root {
+  --bg: #07111f;
+  --bg-soft: #0f1d33;
+  --card: rgba(16, 29, 51, 0.88);
+  --line: rgba(137, 196, 255, 0.2);
+  --ink: #eaf4ff;
+  --muted: #9cb4d1;
+  --accent: #00d4ff;
+  --accent-2: #27f5a8;
+  --danger: #ff6161;
+  --shadow: 0 18px 36px rgba(2, 11, 24, 0.45);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  min-height: 100vh;
+  font-family: "Outfit", "Segoe UI", sans-serif;
+  color: var(--ink);
+  background:
+    radial-gradient(circle at 8% 8%, rgba(0, 212, 255, 0.18), transparent 24%),
+    radial-gradient(circle at 90% 90%, rgba(39, 245, 168, 0.14), transparent 30%),
+    linear-gradient(150deg, #040a14 0%, #07111f 55%, #0a1b2f 100%);
+}
+
+h1,
+h2,
+h3,
+h4 {
+  margin: 0;
+  font-family: "Sora", "Segoe UI", sans-serif;
+}
+
+p {
+  margin: 0;
+}
+
+.admin-wrap {
+  width: min(1260px, calc(100% - 1.4rem));
+  margin: 1rem auto 2rem;
+  display: grid;
+  gap: 1rem;
+}
+
+.panel {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--card);
+  padding: 1rem;
+  display: grid;
+  gap: 0.8rem;
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(9px);
+}
+
+.stack,
+.inline-grid {
+  display: grid;
+  gap: 0.55rem;
+}
+
+input,
+button,
+textarea,
+select {
+  width: 100%;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--ink);
+  padding: 0.66rem 0.7rem;
+  font: inherit;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: rgba(234, 244, 255, 0.55);
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  outline: 2px solid rgba(0, 212, 255, 0.32);
+  border-color: var(--accent);
+}
+
+button {
+  background: linear-gradient(135deg, var(--accent), #1292ff);
+  border: none;
+  font-weight: 700;
+  cursor: pointer;
+  color: #02111f;
+}
+
+button:hover {
+  filter: brightness(1.05);
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+button.danger {
+  background: linear-gradient(135deg, var(--danger), #d74a4a);
+  color: #fff;
+}
+
+label {
+  display: grid;
+  gap: 0.25rem;
+  font-size: 0.92rem;
+}
+
+.inline-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.inline-check input {
+  width: auto;
+}
+
+small {
+  color: var(--muted);
+  min-height: 1rem;
+}
+
+small.error {
+  color: #ff8f8f;
+}
+
+small.success {
+  color: #75f7cd;
+}
+
+.kpis {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.kpis article {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 0.8rem;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.kpis p {
+  font-size: 1.35rem;
+  margin-top: 0.25rem;
+  font-weight: 700;
+  color: var(--accent-2);
+}
+
+.table-wrap {
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 860px;
+}
+
+th,
+td {
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  padding: 0.58rem;
+  vertical-align: top;
+  font-size: 0.89rem;
+}
+
+th {
+  color: #9bd9ff;
+}
+
+td.actions {
+  display: grid;
+  gap: 0.35rem;
+}
+
+td.actions button {
+  font-size: 0.82rem;
+  padding: 0.45rem 0.56rem;
+}
+
+.permission-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 0.45rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 0.55rem;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.perm-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  border: 1px solid rgba(137, 196, 255, 0.16);
+  border-radius: 10px;
+  padding: 0.45rem;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.perm-item input {
+  width: auto;
+}
+
+.disabled-form {
+  opacity: 0.48;
+  filter: grayscale(0.25);
+}
+
+.hidden {
+  display: none !important;
+}
+
+@media (min-width: 900px) {
+  .kpis {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .inline-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.admin-title {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  flex-wrap: wrap;
+}
+
+.admin-brand-logo {
+  height: 44px;
+  width: auto;
+}

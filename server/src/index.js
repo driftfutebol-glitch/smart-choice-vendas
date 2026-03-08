@@ -53,6 +53,34 @@ const SEED_PRODUCTS = [
   { title: "Poco C71", brand: "Poco", storage: "64GB", price: 810, image: "https://images.unsplash.com/photo-1508896694512-1eade5586796?auto=format&fit=crop&w=900&q=70" }
 ];
 
+async function seedProducts(db, force = false) {
+  const existing = await db.get("SELECT COUNT(*) as total FROM products");
+  if (!force && existing && existing.total > 0) {
+    return false;
+  }
+
+  await db.exec("BEGIN");
+  await db.run("DELETE FROM products");
+
+  const stmt = await db.prepare(
+    `
+    INSERT INTO products (title, brand, category, description, technical_specs, price_cash, price_credits, beginner_price, discount_percent, image_url, video_url, stock, is_beginner_offer, promoted, is_active)
+    VALUES (?, ?, 'CELULAR', ?, ?, ?, ?, NULL, 0, ?, NULL, ?, 1, ?, 1)
+    `
+  );
+
+  for (const [index, p] of SEED_PRODUCTS.entries()) {
+    const desc = `${p.title} ${p.storage} - lançamento Smart Choice Vendas`;
+    const specs = `Armazenamento ${p.storage}`;
+    const promoted = index < 4 ? 1 : 0;
+    await stmt.run(p.title, p.brand, desc, specs, p.price, 3000, p.image, 25, promoted);
+  }
+
+  await stmt.finalize();
+  await db.exec("COMMIT");
+  return true;
+}
+
 function sanitizePermissions(input) {
   if (!Array.isArray(input)) {
     return [];
@@ -1402,6 +1430,16 @@ app.get("/api/admin/products", authRequired, adminRequired, requireAdminPermissi
   }
 });
 
+app.post("/api/admin/products/seed", authRequired, adminRequired, requireAdminPermission("PRODUCTS_MANAGE"), async (_req, res) => {
+  try {
+    const db = await getDb();
+    const seeded = await seedProducts(db, true);
+    return res.json({ ok: true, seeded: seeded ? SEED_PRODUCTS.length : 0 });
+  } catch (error) {
+    return res.status(500).json({ error: "Falha ao rodar seed" });
+  }
+});
+
 app.post("/api/admin/products", authRequired, adminRequired, requireAdminPermission("PRODUCTS_MANAGE"), async (req, res) => {
   try {
     const db = await getDb();
@@ -1888,28 +1926,9 @@ async function start() {
 
   const db = await getDb();
 
-  const existingProducts = await db.get("SELECT COUNT(*) as total FROM products");
-  if (!existingProducts || existingProducts.total === 0) {
-    console.log("[seed] Inserindo produtos iniciais (Xiaomi/Realme/Poco)...");
-    await db.exec("BEGIN");
-    await db.run("DELETE FROM products");
-
-    const stmt = await db.prepare(
-      `
-      INSERT INTO products (title, brand, category, description, technical_specs, price_cash, price_credits, beginner_price, discount_percent, image_url, video_url, stock, is_beginner_offer, promoted, is_active)
-      VALUES (?, ?, 'CELULAR', ?, ?, ?, ?, NULL, 0, ?, NULL, ?, 1, ?, 1)
-      `
-    );
-
-    for (const [index, p] of SEED_PRODUCTS.entries()) {
-      const desc = `${p.title} ${p.storage} - lançamento Smart Choice Vendas`;
-      const specs = `Armazenamento ${p.storage}`;
-      const promoted = index < 4 ? 1 : 0;
-      await stmt.run(p.title, p.brand, desc, specs, p.price, 3000, p.image, 25, promoted);
-    }
-    await stmt.finalize();
-    await db.exec("COMMIT");
-    console.log(`[seed] ${SEED_PRODUCTS.length} produtos inseridos.`);
+  const seeded = await seedProducts(db, false);
+  if (seeded) {
+    console.log(`[seed] ${SEED_PRODUCTS.length} produtos inseridos (auto).`);
   }
 
   cron.schedule("0 2 1 * *", async () => {

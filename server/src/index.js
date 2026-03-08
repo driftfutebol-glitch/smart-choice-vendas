@@ -24,6 +24,35 @@ const BEGINNER_DAYS = Number(process.env.BEGINNER_DAYS || 30);
 const PARTNER_MONTHLY_BONUS = Number(process.env.PARTNER_MONTHLY_BONUS || 100);
 const MASTER_KEY = String(process.env.MASTER_KEY || "03142911");
 
+const SEED_PRODUCTS = [
+  { title: "Redmi Note 14", brand: "Xiaomi", storage: "128GB", price: 1318.8, image: "https://images.unsplash.com/photo-1610945415295-d9bbf067e59c?auto=format&fit=crop&w=900&q=70" },
+  { title: "Redmi Note 14", brand: "Xiaomi", storage: "256GB", price: 1438.8, image: "https://images.unsplash.com/photo-1610792516307-ea5acd9c3b00?auto=format&fit=crop&w=900&q=70" },
+  { title: "Redmi Note 14 Pro", brand: "Xiaomi", storage: "128GB", price: 1678.8, image: "https://images.unsplash.com/photo-1580910051074-3eb694886505?auto=format&fit=crop&w=900&q=70" },
+  { title: "Redmi Note 15 Pro 5G", brand: "Xiaomi", storage: "256GB", price: 2518.8, image: "https://images.unsplash.com/photo-1546054454-aa26e2b734c7?auto=format&fit=crop&w=900&q=70" },
+  { title: "Redmi Note 14 Pro 5G", brand: "Xiaomi", storage: "256GB", price: 2278.8, image: "https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?auto=format&fit=crop&w=900&q=70" },
+  { title: "Redmi Note 13", brand: "Xiaomi", storage: "128GB", price: 1198.8, image: "https://images.unsplash.com/photo-1610945265064-0e34e5519bbf?auto=format&fit=crop&w=900&q=70" },
+  { title: "Redmi Note 13", brand: "Xiaomi", storage: "256GB", price: 1378.8, image: "https://images.unsplash.com/photo-1598327105666-5b89351aff97?auto=format&fit=crop&w=900&q=70" },
+  { title: "Redmi 13C", brand: "Xiaomi", storage: "128GB", price: 898.8, image: "https://images.unsplash.com/photo-1581291518857-4e27b48ff24e?auto=format&fit=crop&w=900&q=70" },
+  { title: "Redmi 14C", brand: "Xiaomi", storage: "256GB", price: 1078.8, image: "https://images.unsplash.com/photo-1610945264799-9f1e94c9b8cd?auto=format&fit=crop&w=900&q=70" },
+  { title: "Redmi 14C", brand: "Xiaomi", storage: "256GB", price: 1138.8, image: "https://images.unsplash.com/photo-1517336714731-489689fd1ca8?auto=format&fit=crop&w=900&q=70" },
+  { title: "Redmi 15C", brand: "Xiaomi", storage: "256GB", price: 1198.8, image: "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=900&q=70" },
+  { title: "Redmi 15C", brand: "Xiaomi", storage: "128GB", price: 1050, image: "https://images.unsplash.com/photo-1523475472560-d2df97ec485c?auto=format&fit=crop&w=900&q=70" },
+  { title: "Redmi A5", brand: "Xiaomi", storage: "64GB", price: 838.8, image: "https://images.unsplash.com/photo-1510554310700-42d6557f97d3?auto=format&fit=crop&w=900&q=70" },
+  { title: "Redmi A5", brand: "Xiaomi", storage: "128GB", price: 930, image: "https://images.unsplash.com/photo-1483478550801-ceba5fe50e8e?auto=format&fit=crop&w=900&q=70" },
+  { title: "Realme C63", brand: "Realme", storage: "256GB", price: 1258.8, image: "https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=900&q=70" },
+  { title: "Realme C67", brand: "Realme", storage: "256GB", price: 1318.8, image: "https://images.unsplash.com/photo-1508896694512-1eade5586796?auto=format&fit=crop&w=900&q=70" },
+  { title: "Realme C75", brand: "Realme", storage: "256GB", price: 1498.8, image: "https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?auto=format&fit=crop&w=900&q=70" },
+  { title: "Poco M7 Pro 5G", brand: "Poco", storage: "256GB", price: 1798.8, image: "https://images.unsplash.com/photo-1510557880182-3d4d3cba35a5?auto=format&fit=crop&w=900&q=70" },
+  { title: "Realme Note 60X", brand: "Realme", storage: "64GB", price: 778.8, image: "https://images.unsplash.com/photo-1481277542470-605612bd2d61?auto=format&fit=crop&w=900&q=70" },
+  { title: "Realme Note 60", brand: "Realme", storage: "128GB", price: 930, image: "https://images.unsplash.com/photo-1526045612212-70caf35c14df?auto=format&fit=crop&w=900&q=70" },
+  { title: "Poco X7 5G", brand: "Poco", storage: "512GB", price: 2338.8, image: "https://images.unsplash.com/photo-1481277542470-605612bd2d61?auto=format&fit=crop&w=900&q=70" },
+  { title: "Poco X7 Pro 5G", brand: "Poco", storage: "256GB", price: 2518.8, image: "https://images.unsplash.com/photo-1506617420156-8e4536971650?auto=format&fit=crop&w=900&q=70" },
+  { title: "Poco X7 Pro 5G", brand: "Poco", storage: "512GB", price: 2878.8, image: "https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?auto=format&fit=crop&w=900&q=70" },
+  { title: "Poco X7 5G", brand: "Poco", storage: "256GB", price: 2038.8, image: "https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?auto=format&fit=crop&w=900&q=70" },
+  { title: "Poco C71", brand: "Poco", storage: "128GB", price: 930, image: "https://images.unsplash.com/photo-1545239351-1141bd82e8a6?auto=format&fit=crop&w=900&q=70" },
+  { title: "Poco C71", brand: "Poco", storage: "64GB", price: 810, image: "https://images.unsplash.com/photo-1508896694512-1eade5586796?auto=format&fit=crop&w=900&q=70" }
+];
+
 function sanitizePermissions(input) {
   if (!Array.isArray(input)) {
     return [];
@@ -1857,7 +1886,31 @@ async function start() {
     throw new Error("JWT_SECRET nao configurado. Copie .env.example para .env e ajuste os valores.");
   }
 
-  await getDb();
+  const db = await getDb();
+
+  const existingProducts = await db.get("SELECT COUNT(*) as total FROM products");
+  if (!existingProducts || existingProducts.total === 0) {
+    console.log("[seed] Inserindo produtos iniciais (Xiaomi/Realme/Poco)...");
+    await db.exec("BEGIN");
+    await db.run("DELETE FROM products");
+
+    const stmt = await db.prepare(
+      `
+      INSERT INTO products (title, brand, category, description, technical_specs, price_cash, price_credits, beginner_price, discount_percent, image_url, video_url, stock, is_beginner_offer, promoted, is_active)
+      VALUES (?, ?, 'CELULAR', ?, ?, ?, ?, NULL, 0, ?, NULL, ?, 1, ?, 1)
+      `
+    );
+
+    for (const [index, p] of SEED_PRODUCTS.entries()) {
+      const desc = `${p.title} ${p.storage} - lançamento Smart Choice Vendas`;
+      const specs = `Armazenamento ${p.storage}`;
+      const promoted = index < 4 ? 1 : 0;
+      await stmt.run(p.title, p.brand, desc, specs, p.price, 3000, p.image, 25, promoted);
+    }
+    await stmt.finalize();
+    await db.exec("COMMIT");
+    console.log(`[seed] ${SEED_PRODUCTS.length} produtos inseridos.`);
+  }
 
   cron.schedule("0 2 1 * *", async () => {
     try {

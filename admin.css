@@ -331,6 +331,96 @@ td.actions button {
   gap: 0.55rem;
 }
 
+.panel-head {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.panel-head p {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.product-admin-hero {
+  border: 1px solid rgba(0, 212, 255, 0.3);
+  background: linear-gradient(140deg, rgba(13, 31, 57, 0.96), rgba(10, 26, 46, 0.92));
+}
+
+.product-quick-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.55rem;
+}
+
+.product-quick-stats article {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0.55rem 0.6rem;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.product-quick-stats strong {
+  display: block;
+  color: var(--accent-2);
+  font-size: 1.05rem;
+  margin-top: 0.2rem;
+}
+
+.product-studio {
+  gap: 1rem;
+}
+
+.product-quick-tools {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.product-form-grid {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.form-span-2 {
+  grid-column: span 1;
+}
+
+.products-toolbar {
+  gap: 0.5rem;
+}
+
+.product-cell {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+}
+
+.product-thumb {
+  width: 46px;
+  height: 46px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  object-fit: cover;
+  background: #0a172b;
+}
+
+.badge {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0.12rem 0.45rem;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.badge.ok {
+  color: #75f7cd;
+  border-color: rgba(117, 247, 205, 0.4);
+}
+
+.badge.warn {
+  color: #ffd27a;
+  border-color: rgba(255, 210, 122, 0.4);
+}
+
 .blocked-section {
   opacity: 0.46;
   filter: grayscale(0.25);
@@ -393,8 +483,25 @@ td.actions button {
     grid-template-columns: 1fr 1fr;
   }
 
+  .product-quick-tools {
+    grid-template-columns: 1fr 1fr auto auto;
+    align-items: end;
+  }
+
+  .product-form-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .form-span-2 {
+    grid-column: span 2;
+  }
+
   .toolbar-inline {
     grid-template-columns: minmax(260px, 1fr) auto auto;
     align-items: center;
+  }
+
+  .products-toolbar {
+    grid-template-columns: minmax(260px, 1fr) minmax(170px, 220px) minmax(170px, 220px) auto auto;
   }
 }

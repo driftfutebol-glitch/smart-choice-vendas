@@ -69,6 +69,10 @@ function normalizeText(value) {
     .toLowerCase();
 }
 
+function uniqueSortedValues(list, key) {
+  return [...new Set((list || []).map((item) => String(item?.[key] || "").trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+}
+
 function formatCurrency(value) {
   return Number(value || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
@@ -373,9 +377,9 @@ function fillProductForm(product) {
   form.querySelector("input[name='productId']").value = String(product.id || "");
   form.querySelector("input[name='title']").value = product.title || "";
   form.querySelector("input[name='brand']").value = product.brand || "";
-  form.querySelector("select[name='category']").value = product.category || "CELULAR";
-  form.querySelector("input[name='description']").value = product.description || "";
-  form.querySelector("input[name='technical_specs']").value = product.technical_specs || "";
+  form.querySelector("input[name='category']").value = product.category || "CELULAR";
+  form.querySelector("textarea[name='description']").value = product.description || "";
+  form.querySelector("textarea[name='technical_specs']").value = product.technical_specs || "";
   form.querySelector("input[name='price_cash']").value = Number(product.price_cash || 0);
   form.querySelector("input[name='price_credits']").value = Number(product.price_credits || 0);
   form.querySelector("input[name='beginner_price']").value = product.beginner_price == null ? "" : Number(product.beginner_price);
@@ -395,10 +399,70 @@ function resetProductForm() {
   if (!form) return;
   form.reset();
   form.querySelector("input[name='productId']").value = "";
+  form.querySelector("input[name='category']").value = "CELULAR";
 
   const submitBtn = document.getElementById("productSubmitBtn");
   if (submitBtn) {
     submitBtn.textContent = "Salvar produto";
+  }
+}
+
+function renderProductQuickStats() {
+  const target = document.getElementById("productQuickStats");
+  if (!target) return;
+
+  const total = productsCache.length;
+  const active = productsCache.filter((item) => Number(item.is_active) === 1).length;
+  const promoted = productsCache.filter((item) => Number(item.promoted) === 1).length;
+  const categories = uniqueSortedValues(productsCache, "category");
+
+  target.innerHTML = `
+    <article><span>Total</span><strong>${total}</strong></article>
+    <article><span>Ativos</span><strong>${active}</strong></article>
+    <article><span>Promovidos</span><strong>${promoted}</strong></article>
+    <article><span>Categorias</span><strong>${categories.length}</strong></article>
+  `;
+}
+
+function hydrateProductCategorySources() {
+  const categories = uniqueSortedValues(productsCache, "category");
+  const datalist = document.getElementById("categorySuggestions");
+  if (datalist) {
+    datalist.innerHTML = categories.map((category) => `<option value="${category}"></option>`).join("");
+  }
+
+  const categoryFilter = document.getElementById("productsCategoryFilter");
+  if (categoryFilter) {
+    const selected = categoryFilter.value;
+    categoryFilter.innerHTML = `<option value="">Todas as categorias</option>${categories
+      .map((category) => `<option value="${category}">${category}</option>`)
+      .join("")}`;
+    categoryFilter.value = categories.includes(selected) ? selected : "";
+  }
+
+  const brands = uniqueSortedValues(productsCache, "brand");
+  const brandFilter = document.getElementById("productsBrandFilter");
+  if (brandFilter) {
+    const selected = brandFilter.value;
+    brandFilter.innerHTML = `<option value="">Todas as marcas</option>${brands
+      .map((brand) => `<option value="${brand}">${brand}</option>`)
+      .join("")}`;
+    brandFilter.value = brands.includes(selected) ? selected : "";
+  }
+}
+
+function applyQuickCategoryPreset() {
+  const form = document.getElementById("productCreateForm");
+  if (!form) return;
+
+  const quickBrand = String(document.getElementById("quickBrandSelect")?.value || "").trim();
+  const quickCategory = String(document.getElementById("quickCategoryInput")?.value || "").trim();
+
+  if (quickBrand) {
+    form.querySelector("input[name='brand']").value = quickBrand;
+  }
+  if (quickCategory) {
+    form.querySelector("input[name='category']").value = quickCategory;
   }
 }
 
@@ -411,18 +475,28 @@ function renderProducts() {
     return;
   }
 
+  hydrateProductCategorySources();
+  renderProductQuickStats();
+
   const term = normalizeText(document.getElementById("productsSearchInput")?.value);
   const onlyActive = Boolean(document.getElementById("onlyActiveProductsToggle")?.checked);
+  const onlyPromoted = Boolean(document.getElementById("onlyPromotedProductsToggle")?.checked);
+  const brandFilter = String(document.getElementById("productsBrandFilter")?.value || "").trim();
+  const categoryFilter = String(document.getElementById("productsCategoryFilter")?.value || "").trim();
 
   const rows = productsCache
     .filter((item) => {
       if (onlyActive && !item.is_active) return false;
+      if (onlyPromoted && !item.promoted) return false;
+      if (brandFilter && String(item.brand || "") !== brandFilter) return false;
+      if (categoryFilter && String(item.category || "") !== categoryFilter) return false;
       const searchable = normalizeText(`${item.id} ${item.title} ${item.brand} ${item.category}`);
       return !term || searchable.includes(term);
     })
     .map((item) => {
       const actions = [];
       actions.push(`<button data-action="edit-product" data-id="${item.id}">Editar</button>`);
+      actions.push(`<button data-action="duplicate-product" data-id="${item.id}">Duplicar</button>`);
       if (item.is_active) {
         actions.push(`<button class="danger" data-action="disable-product" data-id="${item.id}">Desativar</button>`);
       }
@@ -430,10 +504,22 @@ function renderProducts() {
         actions.push(`<button data-action="load-discount-product" data-id="${item.id}">Aplicar desconto</button>`);
       }
 
+      const image = item.image_url || "https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?auto=format&fit=crop&w=300&q=60";
+      const promotedBadge = item.promoted ? `<span class="badge ok">PROMO</span>` : `<span class="badge">NORMAL</span>`;
+      const statusBadge = item.is_active ? `<span class="badge ok">ATIVO</span>` : `<span class="badge warn">INATIVO</span>`;
+
       return `
         <tr>
           <td>${item.id}</td>
-          <td>${item.title}</td>
+          <td>
+            <div class="product-cell">
+              <img class="product-thumb" src="${image}" alt="${item.title}" />
+              <div>
+                <strong>${item.title}</strong>
+                <div>${promotedBadge} ${statusBadge}</div>
+              </div>
+            </div>
+          </td>
           <td>${item.brand}</td>
           <td>${item.category}</td>
           <td>${formatCurrency(item.price_cash)}</td>
@@ -448,7 +534,7 @@ function renderProducts() {
     .join("");
 
   target.innerHTML = renderTable(
-    ["ID", "Título", "Marca", "Categoria", "Preço R$", "Créditos", "Desconto", "Estoque", "Status", "Ações"],
+    ["ID", "Produto", "Marca", "Categoria", "Preço R$", "Créditos", "Desconto", "Estoque", "Status", "Ações"],
     rows
   );
 }
@@ -918,10 +1004,11 @@ async function clearDiscount() {
 }
 
 function productPayloadFromForm(formData) {
+  const categoryRaw = String(formData.get("category") || "CELULAR").trim();
   return {
     title: String(formData.get("title") || "").trim(),
     brand: String(formData.get("brand") || "").trim(),
-    category: String(formData.get("category") || "CELULAR"),
+    category: categoryRaw || "CELULAR",
     description: String(formData.get("description") || "").trim(),
     technical_specs: String(formData.get("technical_specs") || "").trim(),
     price_cash: Number(formData.get("price_cash") || 0),
@@ -974,7 +1061,10 @@ function bindFilters() {
   document.getElementById("onlyAdminsToggle")?.addEventListener("change", renderUsers);
   document.getElementById("onlyBannedToggle")?.addEventListener("change", renderUsers);
   document.getElementById("productsSearchInput")?.addEventListener("input", renderProducts);
+  document.getElementById("productsBrandFilter")?.addEventListener("change", renderProducts);
+  document.getElementById("productsCategoryFilter")?.addEventListener("change", renderProducts);
   document.getElementById("onlyActiveProductsToggle")?.addEventListener("change", renderProducts);
+  document.getElementById("onlyPromotedProductsToggle")?.addEventListener("change", renderProducts);
   document.getElementById("onlyOpenTicketsToggle")?.addEventListener("change", renderTickets);
   document.getElementById("logsSearchInput")?.addEventListener("input", renderLogs);
 }
@@ -989,6 +1079,11 @@ function bindActions() {
   document.getElementById("discountForm")?.addEventListener("submit", handleDiscount);
   document.getElementById("productCreateForm")?.addEventListener("submit", handleProductSave);
   document.getElementById("ticketChatForm")?.addEventListener("submit", sendTicketChat);
+  document.getElementById("applyQuickCategoryBtn")?.addEventListener("click", applyQuickCategoryPreset);
+  document.getElementById("newProductBtn")?.addEventListener("click", () => {
+    resetProductForm();
+    setFeedback("productFeedback", "Formulário limpo para novo produto.", "success");
+  });
   document.getElementById("clearDiscountBtn")?.addEventListener("click", clearDiscount);
   document.getElementById("cancelProductEditBtn")?.addEventListener("click", resetProductForm);
 
@@ -1076,6 +1171,25 @@ function bindActions() {
           fillProductForm(product);
           openTab("tab-products");
           setFeedback("productFeedback", `Editando produto #${id}.`, "success");
+        }
+        return;
+      }
+
+      if (action === "duplicate-product") {
+        const product = productsCache.find((item) => Number(item.id) === id);
+        if (product) {
+          fillProductForm({
+            ...product,
+            id: "",
+            title: `${product.title} (Copia)`
+          });
+          const form = document.getElementById("productCreateForm");
+          if (form) {
+            const hiddenId = form.querySelector("input[name='productId']");
+            if (hiddenId) hiddenId.value = "";
+          }
+          openTab("tab-products");
+          setFeedback("productFeedback", `Produto #${id} carregado como cópia.`, "success");
         }
         return;
       }

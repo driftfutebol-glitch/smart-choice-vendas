@@ -157,6 +157,14 @@
       </section>
 
       <section id="tab-products" class="tab-panel hidden">
+        <section class="panel product-admin-hero">
+          <div>
+            <h2>Central de Produtos</h2>
+            <p>Editor rápido com seções/categorias personalizadas, filtros avançados e fluxo mais simples.</p>
+          </div>
+          <div id="productQuickStats" class="product-quick-stats"></div>
+        </section>
+
         <section class="panel" data-permission-gate="DISCOUNTS_MANAGE">
           <h2>Descontos e Promoções</h2>
           <form id="discountForm" class="inline-grid">
@@ -172,28 +180,85 @@
           <small id="discountFeedback"></small>
         </section>
 
-        <section class="panel" data-permission-gate="PRODUCTS_MANAGE">
-          <h2>Cadastrar / Editar Produtos</h2>
-          <form id="productCreateForm" class="inline-grid">
+        <section class="panel product-studio" data-permission-gate="PRODUCTS_MANAGE">
+          <div class="panel-head">
+            <h2>Cadastrar / Editar Produtos</h2>
+            <p>Crie novas seções/categorias e mantenha o catálogo organizado.</p>
+          </div>
+
+          <div class="product-quick-tools">
+            <label>Marca rápida
+              <select id="quickBrandSelect">
+                <option value="">Selecionar marca</option>
+                <option value="Redmi">Redmi</option>
+                <option value="Xiaomi">Xiaomi</option>
+                <option value="Realme">Realme</option>
+                <option value="Poco">Poco</option>
+                <option value="iPhone">iPhone</option>
+                <option value="Samsung">Samsung</option>
+              </select>
+            </label>
+            <label>Nova seção/categoria
+              <input id="quickCategoryInput" type="text" placeholder="Ex: IPHONE, CELULAR PREMIUM, ACESSORIO" list="categorySuggestions" />
+            </label>
+            <button id="applyQuickCategoryBtn" type="button">Aplicar no formulário</button>
+            <button id="newProductBtn" type="button">Novo produto</button>
+          </div>
+
+          <form id="productCreateForm" class="product-form-grid">
             <input type="hidden" name="productId" />
-            <input type="text" name="title" placeholder="Título" required />
-            <input type="text" name="brand" placeholder="Marca" required />
-            <select name="category">
-              <option value="CELULAR">CELULAR</option>
-              <option value="ACESSORIO">ACESSÓRIO</option>
-            </select>
-            <input type="text" name="description" placeholder="Descrição" required />
-            <input type="text" name="technical_specs" placeholder="Specs técnicas" />
-            <input type="number" name="price_cash" placeholder="Preço R$" required />
-            <input type="number" name="price_credits" placeholder="Preço créditos" required />
-            <input type="number" name="beginner_price" placeholder="Preço iniciante" />
-            <input type="text" name="image_url" placeholder="URL imagem" />
-            <input type="text" name="video_url" placeholder="URL vídeo" />
-            <input type="number" name="stock" placeholder="Estoque" required />
+
+            <label>Título
+              <input type="text" name="title" placeholder="Título do produto" required />
+            </label>
+
+            <label>Marca
+              <input type="text" name="brand" placeholder="Marca (Redmi, Xiaomi...)" required />
+            </label>
+
+            <label>Categoria / Seção
+              <input type="text" name="category" placeholder="CELULAR" list="categorySuggestions" required />
+            </label>
+
+            <datalist id="categorySuggestions"></datalist>
+
+            <label>Preço em dinheiro (R$)
+              <input type="number" step="0.01" name="price_cash" placeholder="Preço R$" required />
+            </label>
+
+            <label>Preço em créditos
+              <input type="number" name="price_credits" placeholder="Preço créditos" required />
+            </label>
+
+            <label>Preço iniciante (opcional)
+              <input type="number" step="0.01" name="beginner_price" placeholder="Preço iniciante" />
+            </label>
+
+            <label>Estoque
+              <input type="number" name="stock" placeholder="Estoque" required />
+            </label>
+
+            <label class="form-span-2">Descrição
+              <textarea name="description" rows="3" placeholder="Descrição comercial do produto" required></textarea>
+            </label>
+
+            <label class="form-span-2">Especificações técnicas
+              <textarea name="technical_specs" rows="3" placeholder="Ex: RAM, armazenamento, tela, processador"></textarea>
+            </label>
+
+            <label class="form-span-2">URL imagem
+              <input type="text" name="image_url" placeholder="https://..." />
+            </label>
+
+            <label class="form-span-2">URL vídeo
+              <input type="text" name="video_url" placeholder="https://..." />
+            </label>
+
             <label class="inline-check">
               <input type="checkbox" name="is_beginner_offer" />
               Oferta iniciante
             </label>
+
             <button id="productSubmitBtn" type="submit">Salvar produto</button>
             <button id="cancelProductEditBtn" type="button">Cancelar edição</button>
           </form>
@@ -202,9 +267,16 @@
 
         <section class="panel">
           <h2>Produtos cadastrados</h2>
-          <div class="toolbar-inline">
+          <div class="toolbar-inline products-toolbar">
             <input id="productsSearchInput" type="search" placeholder="Buscar por título, marca ou ID" />
+            <select id="productsBrandFilter">
+              <option value="">Todas as marcas</option>
+            </select>
+            <select id="productsCategoryFilter">
+              <option value="">Todas as categorias</option>
+            </select>
             <label class="inline-check"><input id="onlyActiveProductsToggle" type="checkbox" checked /> Só ativos</label>
+            <label class="inline-check"><input id="onlyPromotedProductsToggle" type="checkbox" /> Só promovidos</label>
           </div>
           <div id="productsList" class="table-wrap"></div>
         </section>

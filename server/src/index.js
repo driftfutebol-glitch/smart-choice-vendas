@@ -23,6 +23,13 @@ const PORT = Number(process.env.PORT || 4000);
 const BEGINNER_DAYS = Number(process.env.BEGINNER_DAYS || 30);
 const PARTNER_MONTHLY_BONUS = Number(process.env.PARTNER_MONTHLY_BONUS || 100);
 const MASTER_KEY = String(process.env.MASTER_KEY || "03142911");
+const WOMENS_CAMPAIGN_NAME = String(process.env.WOMENS_CAMPAIGN_NAME || "Especial Dia da Mulher");
+const WOMENS_CAMPAIGN_START = String(process.env.WOMENS_CAMPAIGN_START || "2026-03-08T00:00:00-03:00");
+const WOMENS_CAMPAIGN_END = String(process.env.WOMENS_CAMPAIGN_END || "2026-03-10T00:00:00-03:00");
+const WOMENS_CAMPAIGN_DISCOUNT_PERCENT = Math.max(0, Math.min(80, Number(process.env.WOMENS_CAMPAIGN_DISCOUNT_PERCENT || 10)));
+const WOMENS_CAMPAIGN_MARKUP_PERCENT = Math.max(0, Math.min(80, Number(process.env.WOMENS_CAMPAIGN_MARKUP_PERCENT || 12)));
+const CHECKOUT_CREDIT_COUPON_COST = Math.max(1, Math.min(1000, Number(process.env.CHECKOUT_CREDIT_COUPON_COST || 50)));
+const CHECKOUT_CREDIT_COUPON_PERCENT = Math.max(0, Math.min(30, Number(process.env.CHECKOUT_CREDIT_COUPON_PERCENT || 5)));
 
 const SEED_PRODUCTS = [
   { title: "Redmi Note 14", brand: "Xiaomi", storage: "128GB", price: 1318.8, image: "https://images.unsplash.com/photo-1610945415295-d9bbf067e59c?auto=format&fit=crop&w=900&q=70" },
@@ -52,6 +59,55 @@ const SEED_PRODUCTS = [
   { title: "Poco C71", brand: "Poco", storage: "128GB", price: 930, image: "https://images.unsplash.com/photo-1545239351-1141bd82e8a6?auto=format&fit=crop&w=900&q=70" },
   { title: "Poco C71", brand: "Poco", storage: "64GB", price: 810, image: "https://images.unsplash.com/photo-1508896694512-1eade5586796?auto=format&fit=crop&w=900&q=70" }
 ];
+
+function roundMoney(value) {
+  return Math.round(Number(value || 0) * 100) / 100;
+}
+
+function getWomensCampaignWindow(referenceDate = new Date()) {
+  const startAt = new Date(WOMENS_CAMPAIGN_START);
+  const endAt = new Date(WOMENS_CAMPAIGN_END);
+  const now = referenceDate instanceof Date ? referenceDate : new Date(referenceDate);
+
+  const invalidWindow = Number.isNaN(startAt.getTime()) || Number.isNaN(endAt.getTime()) || endAt <= startAt;
+  if (invalidWindow) {
+    return {
+      name: WOMENS_CAMPAIGN_NAME,
+      active: false,
+      campaign_markup_percent: WOMENS_CAMPAIGN_MARKUP_PERCENT,
+      discount_percent: WOMENS_CAMPAIGN_DISCOUNT_PERCENT,
+      start_at: WOMENS_CAMPAIGN_START,
+      end_at: WOMENS_CAMPAIGN_END
+    };
+  }
+
+  return {
+    name: WOMENS_CAMPAIGN_NAME,
+    active: now >= startAt && now < endAt,
+    campaign_markup_percent: WOMENS_CAMPAIGN_MARKUP_PERCENT,
+    discount_percent: WOMENS_CAMPAIGN_DISCOUNT_PERCENT,
+    start_at: startAt.toISOString(),
+    end_at: endAt.toISOString()
+  };
+}
+
+function applyCampaignMarkup(priceCash, campaign) {
+  if (!campaign?.active) {
+    return roundMoney(priceCash);
+  }
+
+  const marked = Number(priceCash || 0) * (1 + Number(campaign.campaign_markup_percent || 0) / 100);
+  return roundMoney(marked);
+}
+
+function applyCampaignDiscount(priceCash, campaign) {
+  if (!campaign?.active) {
+    return roundMoney(priceCash);
+  }
+
+  const discounted = Number(priceCash || 0) * (1 - Number(campaign.discount_percent || 0) / 100);
+  return roundMoney(discounted);
+}
 
 async function seedProducts(db, force = false) {
   const existing = await db.get("SELECT COUNT(*) as total FROM products");
@@ -169,6 +225,23 @@ function optionalAuth(req, _res, next) {
 function toInt(value, fallback = 0) {
   const parsed = Number.parseInt(value, 10);
   return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function toBool(value) {
+  if (typeof value === "boolean") {
+    return value;
+  }
+
+  if (typeof value === "number") {
+    return value === 1;
+  }
+
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    return ["1", "true", "on", "yes", "sim"].includes(normalized);
+  }
+
+  return false;
 }
 
 async function loadTicketForAccess(db, ticketId, auth) {
@@ -616,6 +689,7 @@ app.get("/api/products", optionalAuth, async (req, res) => {
     const db = await getDb();
     const brand = String(req.query.brand || "").trim();
     const onlyBeginner = String(req.query.onlyBeginner || "0") === "1";
+    const campaign = getWomensCampaignWindow();
 
     let query = "SELECT * FROM products WHERE is_active = 1";
     const params = [];
@@ -640,14 +714,19 @@ app.get("/api/products", optionalAuth, async (req, res) => {
     }
 
     const normalized = products.map((item) => {
-      const discountedCash = Number(item.price_cash) * (1 - Number(item.discount_percent || 0) / 100);
+      const discountedCash = roundMoney(Number(item.price_cash) * (1 - Number(item.discount_percent || 0) / 100));
+      const campaignBasePrice = applyCampaignMarkup(discountedCash, campaign);
+      const campaignPrice = applyCampaignDiscount(campaignBasePrice, campaign);
       const beginnerAllowed = item.is_beginner_offer && isBeginner && item.beginner_price;
-      const displayPrice = beginnerAllowed ? Number(item.beginner_price) : discountedCash;
+      const beginnerPrice = beginnerAllowed ? Number(item.beginner_price) : null;
+      const displayPrice = beginnerAllowed ? Math.min(beginnerPrice, campaignPrice) : campaignPrice;
 
       return {
         ...item,
-        display_price: displayPrice,
-        beginner_eligible: beginnerAllowed
+        display_price: roundMoney(displayPrice),
+        beginner_eligible: beginnerAllowed,
+        campaign_applied: Boolean(campaign.active),
+        price_before_campaign: campaignBasePrice
       };
     });
 
@@ -656,11 +735,66 @@ app.get("/api/products", optionalAuth, async (req, res) => {
     return res.json({
       ok: true,
       beginner_days_limit: BEGINNER_DAYS,
+      campaign,
       brands: brandRows.map((row) => row.brand),
       products: normalized
     });
   } catch (error) {
     return res.status(500).json({ error: "Falha ao carregar produtos" });
+  }
+});
+
+app.get("/api/reviews", async (req, res) => {
+  try {
+    const db = await getDb();
+    const productId = toInt(req.query.productId);
+    const limitRaw = toInt(req.query.limit, 24);
+    const limit = Math.max(1, Math.min(80, limitRaw || 24));
+
+    const whereClauses = ["p.is_active = 1"];
+    const params = [];
+
+    if (productId) {
+      whereClauses.push("r.product_id = ?");
+      params.push(productId);
+    }
+
+    const whereSql = whereClauses.length ? `WHERE ${whereClauses.join(" AND ")}` : "";
+
+    const rows = await db.all(
+      `
+      SELECT r.id, r.product_id, r.rating, r.comment, r.photo_url, r.created_at,
+             u.name AS user_name, p.title AS product_title, p.brand AS product_brand
+      FROM reviews r
+      JOIN users u ON u.id = r.user_id
+      JOIN products p ON p.id = r.product_id
+      ${whereSql}
+      ORDER BY datetime(r.created_at) DESC, r.id DESC
+      LIMIT ?
+      `,
+      [...params, limit]
+    );
+
+    const summary = await db.get(
+      `
+      SELECT COUNT(*) AS total, ROUND(COALESCE(AVG(r.rating), 0), 2) AS average_rating
+      FROM reviews r
+      JOIN products p ON p.id = r.product_id
+      ${whereSql}
+      `,
+      params
+    );
+
+    return res.json({
+      ok: true,
+      reviews: rows,
+      summary: {
+        total: Number(summary?.total || 0),
+        average_rating: Number(summary?.average_rating || 0)
+      }
+    });
+  } catch (error) {
+    return res.status(500).json({ error: "Falha ao carregar avaliacoes" });
   }
 });
 
@@ -674,8 +808,9 @@ app.get("/api/products/:id/reviews", async (req, res) => {
       SELECT r.id, r.rating, r.comment, r.photo_url, r.created_at, u.name
       FROM reviews r
       JOIN users u ON u.id = r.user_id
-      WHERE r.product_id = ?
-      ORDER BY r.id DESC
+      JOIN products p ON p.id = r.product_id
+      WHERE r.product_id = ? AND p.is_active = 1
+      ORDER BY datetime(r.created_at) DESC, r.id DESC
       `,
       [productId]
     );
@@ -691,11 +826,20 @@ app.post("/api/reviews", authRequired, async (req, res) => {
     const db = await getDb();
     const productId = toInt(req.body.productId);
     const rating = toInt(req.body.rating);
-    const comment = String(req.body.comment || "").trim();
-    const photoUrl = String(req.body.photoUrl || "").trim();
+    const comment = String(req.body.comment || "").trim().slice(0, 800);
+    const photoUrl = String(req.body.photoUrl || "").trim().slice(0, 500);
+
+    if (!productId) {
+      return res.status(400).json({ error: "Produto da avaliacao e obrigatorio" });
+    }
 
     if (rating < 1 || rating > 5) {
       return res.status(400).json({ error: "Nota precisa ser entre 1 e 5" });
+    }
+
+    const product = await db.get("SELECT id, is_active FROM products WHERE id = ?", [productId]);
+    if (!product || !product.is_active) {
+      return res.status(404).json({ error: "Produto nao encontrado para avaliacao" });
     }
 
     await db.run(
@@ -705,6 +849,13 @@ app.post("/api/reviews", authRequired, async (req, res) => {
       `,
       [req.auth.sub, productId, rating, comment, photoUrl]
     );
+
+    await logActivity(db, {
+      actorUserId: req.auth.sub,
+      targetUserId: req.auth.sub,
+      action: "USER_REVIEW_CREATE",
+      details: `Avaliacao enviada para produto ${productId}`
+    });
 
     return res.json({ ok: true });
   } catch (error) {
@@ -717,6 +868,8 @@ app.post("/api/orders/cash", authRequired, async (req, res) => {
     const db = await getDb();
     const productId = toInt(req.body.productId);
     const quantity = Math.max(1, toInt(req.body.quantity, 1));
+    const useCreditCoupon = toBool(req.body.useCreditCoupon);
+    const campaign = getWomensCampaignWindow();
 
     const product = await db.get("SELECT * FROM products WHERE id = ? AND is_active = 1", [productId]);
     if (!product) {
@@ -727,30 +880,87 @@ app.post("/api/orders/cash", authRequired, async (req, res) => {
       return res.status(400).json({ error: "Estoque insuficiente" });
     }
 
-    const totalCash = Number(product.price_cash) * quantity;
+    const discountedCash = roundMoney(Number(product.price_cash) * (1 - Number(product.discount_percent || 0) / 100));
+    const campaignBaseCash = applyCampaignMarkup(discountedCash, campaign);
+    const campaignCash = applyCampaignDiscount(campaignBaseCash, campaign);
+
+    const couponDiscountRate = useCreditCoupon ? CHECKOUT_CREDIT_COUPON_PERCENT / 100 : 0;
+    const couponDiscountPerUnit = useCreditCoupon ? roundMoney(campaignCash * couponDiscountRate) : 0;
+    const finalUnitCash = roundMoney(campaignCash - couponDiscountPerUnit);
+    const totalCash = roundMoney(finalUnitCash * quantity);
     const creditReward = Math.max(10, Math.round(totalCash / 100));
 
-    const result = await db.run(
-      `
-      INSERT INTO orders (user_id, product_id, quantity, total_cash, total_credits, status, credit_reward)
-      VALUES (?, ?, ?, ?, 0, 'PENDING', ?)
-      `,
-      [req.auth.sub, productId, quantity, totalCash, creditReward]
-    );
+    await db.exec("BEGIN TRANSACTION");
+    try {
+      const result = await db.run(
+        `
+        INSERT INTO orders (user_id, product_id, quantity, total_cash, total_credits, status, credit_reward)
+        VALUES (?, ?, ?, ?, 0, 'PENDING', ?)
+        `,
+        [req.auth.sub, productId, quantity, totalCash, creditReward]
+      );
 
-    return res.json({
-      ok: true,
-      order: {
-        id: result.lastID,
-        productId: product.id,
-        productTitle: product.title,
-        quantity,
-        totalCash,
-        creditReward,
-        status: "PENDING"
-      },
-      message: "Pedido criado. Aprovacao de creditos sera feita pelo admin apos confirmacao."
-    });
+      if (useCreditCoupon) {
+        const debitCoupon = await db.run(
+          "UPDATE users SET credits = credits - ?, updated_at = datetime('now') WHERE id = ? AND credits >= ?",
+          [CHECKOUT_CREDIT_COUPON_COST, req.auth.sub, CHECKOUT_CREDIT_COUPON_COST]
+        );
+
+        if (!debitCoupon.changes) {
+          throw new Error("Saldo insuficiente para usar cupom de creditos.");
+        }
+
+        await db.run(
+          "INSERT INTO credit_transactions (user_id, delta, reason, created_by) VALUES (?, ?, ?, ?)",
+          [req.auth.sub, -CHECKOUT_CREDIT_COUPON_COST, `Cupom checkout ${CHECKOUT_CREDIT_COUPON_PERCENT}% no pedido #${result.lastID}`, req.auth.sub]
+        );
+
+        await logActivity(db, {
+          actorUserId: req.auth.sub,
+          targetUserId: req.auth.sub,
+          action: "CHECKOUT_COUPON_REDEEM",
+          details: `Pedido ${result.lastID} com cupom de ${CHECKOUT_CREDIT_COUPON_COST} creditos`
+        });
+      }
+
+      await db.exec("COMMIT");
+
+      const user = await db.get("SELECT id, credits FROM users WHERE id = ?", [req.auth.sub]);
+
+      return res.json({
+        ok: true,
+        order: {
+          id: result.lastID,
+          productId: product.id,
+          productTitle: product.title,
+          quantity,
+          totalCash,
+          unitCash: finalUnitCash,
+          unitCashBeforeCampaignDiscount: campaignBaseCash,
+          unitCashBeforeCoupon: campaignCash,
+          couponApplied: Boolean(useCreditCoupon),
+          couponCreditsUsed: useCreditCoupon ? CHECKOUT_CREDIT_COUPON_COST : 0,
+          couponDiscountPercent: useCreditCoupon ? CHECKOUT_CREDIT_COUPON_PERCENT : 0,
+          campaignApplied: Boolean(campaign.active),
+          creditReward,
+          status: "PENDING"
+        },
+        user: user
+          ? {
+              id: user.id,
+              credits: Number(user.credits || 0)
+            }
+          : null,
+        message: "Pedido criado. Aprovacao de creditos sera feita pelo admin apos confirmacao."
+      });
+    } catch (error) {
+      await db.exec("ROLLBACK");
+      if (/Saldo insuficiente/.test(String(error.message || ""))) {
+        return res.status(400).json({ error: "Saldo insuficiente para usar cupom de creditos" });
+      }
+      throw error;
+    }
+
   } catch (error) {
     return res.status(500).json({ error: "Falha ao criar pedido" });
   }
@@ -1553,6 +1763,99 @@ app.delete("/api/admin/products/:id", authRequired, adminRequired, requireAdminP
     return res.json({ ok: true });
   } catch (error) {
     return res.status(500).json({ error: "Falha ao remover produto" });
+  }
+});
+
+app.get("/api/admin/reviews", authRequired, adminRequired, requireAdminPermission("REVIEWS_MANAGE"), async (_req, res) => {
+  try {
+    const db = await getDb();
+    const reviews = await db.all(
+      `
+      SELECT r.id, r.user_id, u.name AS user_name, u.email AS user_email,
+             r.product_id, p.title AS product_title, p.brand AS product_brand,
+             r.rating, r.comment, r.photo_url, r.created_at
+      FROM reviews r
+      JOIN users u ON u.id = r.user_id
+      JOIN products p ON p.id = r.product_id
+      ORDER BY datetime(r.created_at) DESC, r.id DESC
+      `
+    );
+
+    return res.json({ ok: true, reviews });
+  } catch (error) {
+    return res.status(500).json({ error: "Falha ao listar avaliacoes no admin" });
+  }
+});
+
+app.put("/api/admin/reviews/:id", authRequired, adminRequired, requireAdminPermission("REVIEWS_MANAGE"), async (req, res) => {
+  try {
+    const db = await getDb();
+    const reviewId = toInt(req.params.id);
+    const ratingRaw = req.body.rating;
+    const commentRaw = req.body.comment;
+    const photoUrlRaw = req.body.photo_url ?? req.body.photoUrl;
+
+    const review = await db.get("SELECT id, user_id FROM reviews WHERE id = ?", [reviewId]);
+    if (!review) {
+      return res.status(404).json({ error: "Avaliacao nao encontrada" });
+    }
+
+    const nextRating = ratingRaw == null ? null : toInt(ratingRaw);
+    if (nextRating != null && (nextRating < 1 || nextRating > 5)) {
+      return res.status(400).json({ error: "Nota precisa ser entre 1 e 5" });
+    }
+
+    await db.run(
+      `
+      UPDATE reviews
+      SET rating = COALESCE(?, rating),
+          comment = COALESCE(?, comment),
+          photo_url = COALESCE(?, photo_url)
+      WHERE id = ?
+      `,
+      [
+        nextRating == null ? null : nextRating,
+        commentRaw == null ? null : String(commentRaw).trim().slice(0, 800),
+        photoUrlRaw == null ? null : String(photoUrlRaw).trim().slice(0, 500),
+        reviewId
+      ]
+    );
+
+    await logActivity(db, {
+      actorUserId: req.auth.sub,
+      targetUserId: review.user_id,
+      action: "ADMIN_REVIEW_UPDATE",
+      details: `Avaliacao #${reviewId} editada`
+    });
+
+    return res.json({ ok: true });
+  } catch (error) {
+    return res.status(500).json({ error: "Falha ao editar avaliacao" });
+  }
+});
+
+app.delete("/api/admin/reviews/:id", authRequired, adminRequired, requireAdminPermission("REVIEWS_MANAGE"), async (req, res) => {
+  try {
+    const db = await getDb();
+    const reviewId = toInt(req.params.id);
+
+    const review = await db.get("SELECT id, user_id FROM reviews WHERE id = ?", [reviewId]);
+    if (!review) {
+      return res.status(404).json({ error: "Avaliacao nao encontrada" });
+    }
+
+    await db.run("DELETE FROM reviews WHERE id = ?", [reviewId]);
+
+    await logActivity(db, {
+      actorUserId: req.auth.sub,
+      targetUserId: review.user_id,
+      action: "ADMIN_REVIEW_DELETE",
+      details: `Avaliacao #${reviewId} removida`
+    });
+
+    return res.json({ ok: true });
+  } catch (error) {
+    return res.status(500).json({ error: "Falha ao excluir avaliacao" });
   }
 });
 

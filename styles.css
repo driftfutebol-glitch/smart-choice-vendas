@@ -139,6 +139,12 @@ p {
   color: var(--primary);
 }
 
+.menu a[data-campaign-link] {
+  border-color: rgba(255, 0, 95, 0.35);
+  color: #d1005f;
+  background: linear-gradient(120deg, rgba(255, 214, 230, 0.8), rgba(255, 242, 202, 0.8));
+}
+
 .container {
   width: min(1200px, calc(100% - 1.4rem));
   margin: 1.2rem auto 2rem;
@@ -194,6 +200,48 @@ p {
   object-fit: cover;
   border-radius: 14px;
   border: 1px solid var(--line);
+}
+
+.campaign-spotlight {
+  border: 1px solid rgba(209, 0, 95, 0.24);
+  border-radius: 22px;
+  padding: 1rem;
+  background:
+    radial-gradient(circle at 10% 0%, rgba(255, 0, 95, 0.18), transparent 38%),
+    radial-gradient(circle at 90% 100%, rgba(255, 166, 0, 0.16), transparent 45%),
+    linear-gradient(120deg, #fff5f9 0%, #fffdf3 100%);
+  box-shadow: 0 20px 40px rgba(209, 0, 95, 0.12);
+  display: grid;
+  gap: 0.8rem;
+}
+
+.campaign-content {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.campaign-kicker {
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #d1005f;
+  font-size: 0.74rem;
+}
+
+.campaign-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.campaign-tag {
+  border: 1px solid rgba(209, 0, 95, 0.35);
+  border-radius: 999px;
+  padding: 0.26rem 0.64rem;
+  background: rgba(255, 255, 255, 0.82);
+  color: #8e0040;
+  font-weight: 700;
+  font-size: 0.88rem;
 }
 
 .tech-strip {
@@ -449,6 +497,27 @@ select:focus {
   font-weight: 700;
 }
 
+.price-main.campaign {
+  color: #d1005f;
+}
+
+.price-old {
+  color: var(--muted);
+  text-decoration: line-through;
+  font-size: 0.9rem;
+}
+
+.price-campaign-tag {
+  width: fit-content;
+  border: 1px solid rgba(209, 0, 95, 0.35);
+  border-radius: 999px;
+  padding: 0.16rem 0.54rem;
+  font-weight: 700;
+  color: #8e0040;
+  background: rgba(255, 235, 244, 0.8);
+  animation: promoPulse 1.8s ease-in-out infinite;
+}
+
 .price-beginner {
   color: var(--accent);
   font-weight: 700;
@@ -459,6 +528,97 @@ select:focus {
   display: flex;
   flex-wrap: wrap;
   gap: 0.45rem;
+}
+
+.reviews-toolbar {
+  display: grid;
+  gap: 0.6rem;
+  margin-bottom: 0.75rem;
+}
+
+.reviews-summary {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 0.65rem;
+  background: linear-gradient(120deg, rgba(0, 169, 255, 0.13), rgba(0, 208, 132, 0.12));
+}
+
+.reviews-summary strong {
+  display: block;
+  font-size: 1.3rem;
+  line-height: 1;
+}
+
+.reviews-summary p {
+  color: var(--muted);
+  margin-top: 0.25rem;
+  font-weight: 600;
+}
+
+.reviews-list {
+  display: grid;
+  gap: 0.65rem;
+  margin-bottom: 0.85rem;
+}
+
+.review-card {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fff;
+  padding: 0.72rem;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.review-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.review-stars {
+  color: #ffb300;
+  letter-spacing: 0.04em;
+  font-weight: 700;
+}
+
+.review-meta {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.review-photo {
+  width: 100%;
+  max-height: 180px;
+  object-fit: cover;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+}
+
+.trust-seals {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.trust-seals article {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 0.72rem;
+  background: #fff;
+  display: grid;
+  gap: 0.36rem;
+}
+
+.seal-icon {
+  width: fit-content;
+  border-radius: 999px;
+  padding: 0.2rem 0.58rem;
+  border: 1px solid rgba(0, 169, 255, 0.4);
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--primary);
+  background: rgba(0, 169, 255, 0.1);
 }
 
 .partner-box {
@@ -545,6 +705,16 @@ small.success {
   }
 }
 
+@keyframes promoPulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.03);
+  }
+}
+
 @media (max-width: 759px) {
   .topbar {
     border-radius: 18px;
@@ -571,7 +741,8 @@ small.success {
 
   .hero,
   .card,
-  .brand-showcase {
+  .brand-showcase,
+  .campaign-spotlight {
     padding: 0.8rem;
     border-radius: 16px;
   }
@@ -600,6 +771,10 @@ small.success {
   }
 
   .products-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .reviews-toolbar {
     grid-template-columns: 1fr;
   }
 
@@ -634,6 +809,11 @@ small.success {
     align-items: center;
   }
 
+  .campaign-spotlight {
+    grid-template-columns: 1fr auto;
+    align-items: center;
+  }
+
   .tech-strip {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
@@ -654,6 +834,19 @@ small.success {
     grid-template-columns: repeat(5, minmax(0, 1fr));
   }
 
+  .reviews-toolbar {
+    grid-template-columns: 1fr auto;
+    align-items: end;
+  }
+
+  .reviews-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .trust-seals {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
   .brands-grid img {
     height: 95px;
   }
@@ -661,6 +854,10 @@ small.success {
 
 @media (min-width: 1060px) {
   .products-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .reviews-list {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
@@ -761,6 +958,57 @@ small.success {
   gap: 0.9rem;
 }
 
+.women-banner {
+  margin-top: 0.9rem;
+  border: 1px solid rgba(255, 77, 145, 0.28);
+  border-radius: 16px;
+  padding: 0.9rem;
+  background:
+    radial-gradient(circle at 92% 8%, rgba(255, 255, 255, 0.75), transparent 30%),
+    linear-gradient(135deg, rgba(255, 83, 147, 0.18), rgba(255, 189, 213, 0.22) 45%, rgba(255, 136, 189, 0.1));
+  position: relative;
+  overflow: hidden;
+  animation: womenGlow 4s ease-in-out infinite;
+}
+
+.women-banner::after {
+  content: "";
+  position: absolute;
+  inset: -120% -40%;
+  background: linear-gradient(120deg, transparent 35%, rgba(255, 255, 255, 0.22), transparent 65%);
+  animation: womenSweep 6s linear infinite;
+  pointer-events: none;
+}
+
+.women-banner strong {
+  display: block;
+  color: #9a0e58;
+  letter-spacing: 0.04em;
+  margin-bottom: 0.24rem;
+}
+
+.women-banner p {
+  margin: 0;
+  color: #7f2752;
+}
+
+.women-badges {
+  margin-top: 0.55rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.women-badges span {
+  border: 1px solid rgba(255, 77, 145, 0.28);
+  border-radius: 999px;
+  padding: 0.28rem 0.62rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #9a0e58;
+  background: rgba(255, 255, 255, 0.74);
+}
+
 .checkout-card h2 {
   margin-bottom: 0.6rem;
 }
@@ -816,6 +1064,83 @@ small.success {
 
 .checkout-summary strong {
   color: var(--ink);
+}
+
+.checkout-summary-total {
+  border-width: 2px;
+  border-color: rgba(12, 181, 216, 0.35);
+  background: linear-gradient(120deg, rgba(11, 26, 54, 0.02), rgba(11, 26, 54, 0.07));
+}
+
+.checkout-summary-total strong {
+  color: #0760ba;
+}
+
+.coupon-card {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 0.8rem;
+  background: linear-gradient(165deg, rgba(255, 255, 255, 0.96), rgba(236, 247, 255, 0.95));
+  display: grid;
+  gap: 0.6rem;
+}
+
+.coupon-card-head h3 {
+  margin: 0;
+  font-size: 1.02rem;
+}
+
+.coupon-card-head p {
+  margin: 0.2rem 0 0;
+  color: var(--muted);
+}
+
+.coupon-toggle {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 0.65rem;
+  display: flex;
+  align-items: center;
+  gap: 0.56rem;
+  background: #fff;
+}
+
+.coupon-toggle input {
+  width: 18px;
+  height: 18px;
+  accent-color: #0ab6ff;
+}
+
+.coupon-toggle span {
+  font-weight: 600;
+}
+
+#couponHint {
+  color: var(--muted);
+}
+
+.coupon-ready {
+  border-color: rgba(15, 199, 123, 0.45);
+  background: linear-gradient(130deg, rgba(15, 199, 123, 0.1), rgba(255, 255, 255, 0.98));
+}
+
+@keyframes womenGlow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 rgba(255, 87, 161, 0);
+  }
+  50% {
+    box-shadow: 0 12px 26px rgba(255, 87, 161, 0.2);
+  }
+}
+
+@keyframes womenSweep {
+  0% {
+    transform: translateX(-55%) rotate(14deg);
+  }
+  100% {
+    transform: translateX(55%) rotate(14deg);
+  }
 }
 
 .chat-box {

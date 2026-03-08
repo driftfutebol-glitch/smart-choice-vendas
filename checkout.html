@@ -42,6 +42,15 @@
         <p>Escolha o canal de pagamento: atendimento humano no chat ou WhatsApp com envio automático do pedido.</p>
       </div>
       <p id="checkoutStatus" class="auth-tip"></p>
+      <div class="women-banner" id="womenBanner">
+        <strong>Especial Dia das Mulheres</strong>
+        <p>Semana com visual comemorativo, brilho especial e ofertas com energia premium.</p>
+        <div class="women-badges">
+          <span>Atendimento prioritário</span>
+          <span>Promoções especiais</span>
+          <span>Checkout protegido</span>
+        </div>
+      </div>
     </section>
 
     <section class="checkout-layout">
@@ -54,6 +63,8 @@
         <h2>Resumo do Pedido</h2>
         <div class="checkout-summary">
           <p><span>Subtotal</span><strong id="summarySubtotal">R$ 0,00</strong></p>
+          <p><span>Cupom Smart Créditos (5%)</span><strong id="summaryCouponDiscount">- R$ 0,00</strong></p>
+          <p class="checkout-summary-total"><span>Total final</span><strong id="summaryTotal">R$ 0,00</strong></p>
           <p><span>Bônus previsto (após aprovação)</span><strong id="summaryReward">0 créditos</strong></p>
         </div>
       </article>
@@ -85,6 +96,18 @@
               <option value="WHATSAPP">Finalizar no WhatsApp</option>
             </select>
           </label>
+        </div>
+
+        <div class="coupon-card" id="creditCouponCard">
+          <div class="coupon-card-head">
+            <h3>Cupom de Créditos</h3>
+            <p>Use 50 créditos e ganhe 5% OFF no valor final deste pedido.</p>
+          </div>
+          <label class="coupon-toggle">
+            <input type="checkbox" name="useCreditCoupon" id="useCreditCoupon" />
+            <span>Ativar cupom agora (consome 50 créditos)</span>
+          </label>
+          <small id="couponHint">Faça login para habilitar o cupom de créditos.</small>
         </div>
 
         <label>Observações

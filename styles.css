@@ -545,6 +545,79 @@ small.success {
   }
 }
 
+@media (max-width: 759px) {
+  .topbar {
+    border-radius: 18px;
+    padding: 0.58rem 0.62rem;
+    position: sticky;
+    top: 0.35rem;
+    z-index: 24;
+  }
+
+  .menu {
+    padding-bottom: 0.2rem;
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .menu::-webkit-scrollbar {
+    display: none;
+  }
+
+  .container {
+    margin-top: 0.85rem;
+    gap: 0.78rem;
+  }
+
+  .hero,
+  .card,
+  .brand-showcase {
+    padding: 0.8rem;
+    border-radius: 16px;
+  }
+
+  .hero-gallery {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .hero-gallery img {
+    height: 105px;
+  }
+
+  .filters {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .chip {
+    width: 100%;
+    text-align: center;
+  }
+
+  .filters .inline-check {
+    grid-column: span 2;
+    margin-left: 0;
+  }
+
+  .products-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .product img {
+    height: 150px;
+  }
+
+  .product-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .product-actions .btn {
+    width: 100%;
+    text-align: center;
+  }
+}
+
 @media (min-width: 760px) {
   .topbar {
     display: flex;

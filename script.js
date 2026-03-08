@@ -1,18 +1,47 @@
+const CLOUD_API_BASE = "https://smart-choice-vendas.onrender.com/api";
+
+function isLocalLikeHostName(hostname) {
+  if (!hostname) return true;
+  if (hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1") return true;
+  if (!/^\d{1,3}(\.\d{1,3}){3}$/.test(hostname)) return false;
+  const parts = hostname.split(".").map((n) => Number(n));
+  if (parts[0] === 10) return true;
+  if (parts[0] === 127) return true;
+  if (parts[0] === 192 && parts[1] === 168) return true;
+  if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return true;
+  if (parts[0] === 169 && parts[1] === 254) return true;
+  return false;
+}
+
+function normalizeApiBase(rawValue) {
+  return String(rawValue || "").trim().replace(/\/+$/, "");
+}
+
 function resolveApiBase() {
   const hostname = window.location.hostname || "localhost";
-  const isLocalLikeHost = hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1" || /^\d{1,3}(\.\d{1,3}){3}$/.test(hostname);
+  const isLocalLikeHost = isLocalLikeHostName(hostname);
   const params = new URLSearchParams(window.location.search);
-  const apiFromQuery = (params.get("api") || "").trim();
+  const apiFromQuery = normalizeApiBase(params.get("api"));
   if (apiFromQuery) {
     localStorage.setItem("scv_api_base", apiFromQuery);
-    return apiFromQuery.replace(/\/+$/, "");
+    return apiFromQuery;
   }
 
-  const stored = (localStorage.getItem("scv_api_base") || "").trim();
+  const stored = normalizeApiBase(localStorage.getItem("scv_api_base"));
   if (stored) {
-    const storedIsLocal = /localhost|127\.0\.0\.1|::1/.test(stored);
-    if (!storedIsLocal || isLocalLikeHost) {
-      return stored.replace(/\/+$/, "");
+    try {
+      const storedUrl = new URL(stored);
+      const storedIsLocal = isLocalLikeHostName(storedUrl.hostname);
+      const storedIsHttps = storedUrl.protocol === "https:";
+
+      // Em produção (site público), ignora API local/insegura gravada no celular.
+      if (!isLocalLikeHost && (storedIsLocal || !storedIsHttps)) {
+        localStorage.removeItem("scv_api_base");
+      } else if (!storedIsLocal || isLocalLikeHost) {
+        return stored;
+      }
+    } catch (_error) {
+      localStorage.removeItem("scv_api_base");
     }
   }
 
@@ -21,10 +50,10 @@ function resolveApiBase() {
     return `${protocol}//${hostname}:4000/api`;
   }
 
-  return "https://smart-choice-vendas.onrender.com/api";
+  return CLOUD_API_BASE;
 }
 
-const API_BASE = resolveApiBase();
+let apiBase = resolveApiBase();
 
 let authToken = localStorage.getItem("scv_token") || "";
 let currentUser = null;
@@ -91,14 +120,28 @@ async function apiRequest(path, options = {}) {
     headers.Authorization = `Bearer ${authToken}`;
   }
 
-  let response;
-  try {
-    response = await fetch(`${API_BASE}${path}`, {
+  async function fetchWithBase(base) {
+    return fetch(`${base}${path}`, {
       ...options,
       headers
     });
+  }
+
+  let response;
+  try {
+    response = await fetchWithBase(apiBase);
   } catch (_error) {
-    throw new Error("Servidor offline. Inicie o backend para continuar.");
+    if (apiBase !== CLOUD_API_BASE) {
+      try {
+        response = await fetchWithBase(CLOUD_API_BASE);
+        apiBase = CLOUD_API_BASE;
+        localStorage.setItem("scv_api_base", CLOUD_API_BASE);
+      } catch (_fallbackError) {
+        throw new Error("Servidor offline. Tente atualizar a página no celular.");
+      }
+    } else {
+      throw new Error("Servidor offline. Tente atualizar a página no celular.");
+    }
   }
 
   const data = await response.json().catch(() => ({}));
@@ -111,6 +154,13 @@ async function apiRequest(path, options = {}) {
 
 function setupReveal() {
   const items = document.querySelectorAll(".reveal");
+  if (!items.length) return;
+
+  if (typeof window.IntersectionObserver !== "function") {
+    items.forEach((item) => item.classList.add("visible"));
+    return;
+  }
+
   const observer = new IntersectionObserver(
     (entries) => {
       entries.forEach((entry) => {
@@ -124,6 +174,15 @@ function setupReveal() {
   );
 
   items.forEach((item) => observer.observe(item));
+
+  // Failsafe para alguns navegadores móveis que não disparam observer corretamente.
+  window.setTimeout(() => {
+    items.forEach((item) => {
+      if (!item.classList.contains("visible")) {
+        item.classList.add("visible");
+      }
+    });
+  }, 1400);
 }
 
 function openModal(modalId) {
@@ -509,7 +568,7 @@ async function buyWithCredits(productId) {
 
 function goToCheckout(productId) {
   const base = window.location.pathname.endsWith("/") ? `${window.location.pathname}checkout.html` : "checkout.html";
-  const apiParam = encodeURIComponent(API_BASE);
+  const apiParam = encodeURIComponent(apiBase || CLOUD_API_BASE);
   window.location.href = `${base}?productId=${productId}&api=${apiParam}`;
 }
 

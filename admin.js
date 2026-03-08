@@ -33,6 +33,7 @@ let usersCache = [];
 let productsCache = [];
 let ordersCache = [];
 let ticketsCache = [];
+let reviewsCache = [];
 let activeTicketChatId = null;
 let logsCache = [];
 let analyticsCache = { visitors: [], signups: [] };
@@ -67,6 +68,19 @@ function normalizeText(value) {
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase();
+}
+
+function isRouteNotFoundError(error) {
+  return String(error?.message || "").toLowerCase().includes("rota nao encontrada");
+}
+
+function escapeHtml(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 function uniqueSortedValues(list, key) {
@@ -169,13 +183,24 @@ function applyPermissionGates() {
 }
 
 function openTab(tabId) {
+  let activeButton = null;
   document.querySelectorAll(".tab-btn").forEach((btn) => {
-    btn.classList.toggle("active", btn.getAttribute("data-tab-target") === tabId);
+    const isActive = btn.getAttribute("data-tab-target") === tabId;
+    btn.classList.toggle("active", isActive);
+    if (isActive) {
+      activeButton = btn;
+    }
   });
 
   document.querySelectorAll(".tab-panel").forEach((panel) => {
     panel.classList.toggle("hidden", panel.id !== tabId);
   });
+
+  const activeModuleLabel = document.getElementById("activeModuleLabel");
+  if (activeModuleLabel && activeButton) {
+    const titleNode = activeButton.querySelector(".tab-title");
+    activeModuleLabel.textContent = titleNode ? titleNode.textContent.trim() : activeButton.textContent.trim();
+  }
 }
 
 function setupTabs() {
@@ -608,6 +633,121 @@ async function loadOrders() {
   renderOrders();
 }
 
+function resetReviewForm() {
+  const form = document.getElementById("reviewEditForm");
+  if (!form) return;
+  form.reset();
+  const idInput = form.querySelector("input[name='reviewId']");
+  if (idInput) idInput.value = "";
+}
+
+function fillReviewForm(review) {
+  const form = document.getElementById("reviewEditForm");
+  if (!form || !review) return;
+
+  form.querySelector("input[name='reviewId']").value = String(review.id || "");
+  form.querySelector("input[name='rating']").value = String(review.rating || 5);
+  form.querySelector("input[name='photo_url']").value = review.photo_url || "";
+  form.querySelector("input[name='comment']").value = review.comment || "";
+}
+
+function renderReviewsAdmin() {
+  const target = document.getElementById("reviewsAdminList");
+  if (!target) return;
+
+  if (!hasPermission("REVIEWS_MANAGE")) {
+    target.innerHTML = "<p>Sem permissão para visualizar avaliações.</p>";
+    return;
+  }
+
+  const term = normalizeText(document.getElementById("reviewsSearchInput")?.value);
+  const ratingFilter = Number(document.getElementById("reviewsRatingFilter")?.value || 0);
+
+  const rows = reviewsCache
+    .filter((review) => {
+      if (ratingFilter && Number(review.rating) !== ratingFilter) return false;
+      if (!term) return true;
+      const searchable = normalizeText(`${review.id} ${review.user_name} ${review.product_title} ${review.comment}`);
+      return searchable.includes(term);
+    })
+    .map((review) => {
+      const photoLink = review.photo_url ? `<a href="${escapeHtml(review.photo_url)}" target="_blank" rel="noopener noreferrer">Abrir foto</a>` : "-";
+
+      return `
+        <tr>
+          <td>${review.id}</td>
+          <td>${escapeHtml(review.user_name || "-")}</td>
+          <td>${escapeHtml(review.product_title || "-")}</td>
+          <td><span class="rating-pill">${"★".repeat(Number(review.rating || 0))}</span></td>
+          <td class="review-comment-cell">${escapeHtml(review.comment || "-")}</td>
+          <td>${photoLink}</td>
+          <td>${formatDate(review.created_at)}</td>
+          <td class="actions">
+            <button data-action="edit-review" data-id="${review.id}">Editar</button>
+            <button class="danger" data-action="delete-review" data-id="${review.id}">Excluir</button>
+          </td>
+        </tr>
+      `;
+    })
+    .join("");
+
+  target.innerHTML = renderTable(
+    ["ID", "Cliente", "Produto", "Nota", "Comentário", "Foto", "Data", "Ações"],
+    rows
+  );
+}
+
+async function loadReviewsAdmin() {
+  if (!hasPermission("REVIEWS_MANAGE")) {
+    showSectionMessage("reviewsAdminList", "Sem permissão para visualizar avaliações.");
+    return;
+  }
+
+  try {
+    const result = await apiRequest("/admin/reviews");
+    reviewsCache = result.reviews || [];
+    renderReviewsAdmin();
+  } catch (error) {
+    reviewsCache = [];
+    renderReviewsAdmin();
+
+    if (isRouteNotFoundError(error)) {
+      showSectionMessage("reviewsAdminList", "Backend atual ainda sem rota de avaliações. Faça deploy do backend para liberar este módulo.");
+      return;
+    }
+
+    showSectionMessage("reviewsAdminList", `Falha ao carregar avaliações: ${error.message}`);
+  }
+}
+
+async function handleReviewEdit(event) {
+  event.preventDefault();
+  const formData = new FormData(event.currentTarget);
+  const reviewId = Number(formData.get("reviewId"));
+
+  if (!reviewId) {
+    setFeedback("reviewEditFeedback", "Informe o ID da avaliação.", "error");
+    return;
+  }
+
+  try {
+    await apiRequest(`/admin/reviews/${reviewId}`, {
+      method: "PUT",
+      body: JSON.stringify({
+        rating: Number(formData.get("rating")),
+        comment: String(formData.get("comment") || "").trim(),
+        photo_url: String(formData.get("photo_url") || "").trim()
+      })
+    });
+
+    setFeedback("reviewEditFeedback", "Avaliação atualizada com sucesso.", "success");
+    resetReviewForm();
+    await loadReviewsAdmin();
+  } catch (error) {
+    setFeedback("reviewEditFeedback", error.message, "error");
+  }
+}
+
 function renderTickets() {
   const target = document.getElementById("ticketsList");
   if (!target) return;
@@ -774,7 +914,7 @@ async function loadLogs() {
 }
 
 async function refreshAll() {
-  await Promise.all([loadAnalytics(), loadUsers(), loadProducts(), loadOrders(), loadTickets(), loadLogs()]);
+  await Promise.all([loadAnalytics(), loadUsers(), loadProducts(), loadReviewsAdmin(), loadOrders(), loadTickets(), loadLogs()]);
 }
 
 function loadPermissionsFromUser(userId) {
@@ -841,7 +981,8 @@ function logoutAdmin() {
 
 async function handleCreateUser(event) {
   event.preventDefault();
-  const payload = Object.fromEntries(new FormData(event.currentTarget));
+  const form = event.currentTarget;
+  const payload = Object.fromEntries(new FormData(form));
 
   try {
     const effectivePhone = String(payload.phone || "").trim() || buildAutoPhoneTag(payload.email);
@@ -860,7 +1001,7 @@ async function handleCreateUser(event) {
     });
 
     setFeedback("createUserFeedback", "Usuário criado com sucesso.", "success");
-    event.currentTarget.reset();
+    form.reset();
     await refreshAll();
   } catch (error) {
     setFeedback("createUserFeedback", error.message, "error");
@@ -893,7 +1034,8 @@ async function handleSavePermissions(event) {
 
 async function handleCreditAdjust(event) {
   event.preventDefault();
-  const payload = Object.fromEntries(new FormData(event.currentTarget));
+  const form = event.currentTarget;
+  const payload = Object.fromEntries(new FormData(form));
 
   try {
     await apiRequest("/admin/credits/adjust", {
@@ -907,7 +1049,7 @@ async function handleCreditAdjust(event) {
     });
 
     setFeedback("creditFeedback", "Créditos atualizados com sucesso.", "success");
-    event.currentTarget.reset();
+    form.reset();
     await refreshAll();
   } catch (error) {
     setFeedback("creditFeedback", error.message, "error");
@@ -916,7 +1058,8 @@ async function handleCreditAdjust(event) {
 
 async function handlePasswordReset(event) {
   event.preventDefault();
-  const payload = Object.fromEntries(new FormData(event.currentTarget));
+  const form = event.currentTarget;
+  const payload = Object.fromEntries(new FormData(form));
 
   try {
     await apiRequest(`/admin/users/${Number(payload.userId)}/password`, {
@@ -928,7 +1071,7 @@ async function handlePasswordReset(event) {
     });
 
     setFeedback("passwordResetFeedback", "Senha redefinida com sucesso.", "success");
-    event.currentTarget.reset();
+    form.reset();
   } catch (error) {
     setFeedback("passwordResetFeedback", error.message, "error");
   }
@@ -936,7 +1079,8 @@ async function handlePasswordReset(event) {
 
 async function handleNotification(event) {
   event.preventDefault();
-  const payload = Object.fromEntries(new FormData(event.currentTarget));
+  const form = event.currentTarget;
+  const payload = Object.fromEntries(new FormData(form));
 
   try {
     await apiRequest("/admin/notifications/send", {
@@ -949,7 +1093,7 @@ async function handleNotification(event) {
     });
 
     setFeedback("notificationFeedback", "Notificação enviada com sucesso.", "success");
-    event.currentTarget.reset();
+    form.reset();
   } catch (error) {
     setFeedback("notificationFeedback", error.message, "error");
   }
@@ -1065,6 +1209,8 @@ function bindFilters() {
   document.getElementById("productsCategoryFilter")?.addEventListener("change", renderProducts);
   document.getElementById("onlyActiveProductsToggle")?.addEventListener("change", renderProducts);
   document.getElementById("onlyPromotedProductsToggle")?.addEventListener("change", renderProducts);
+  document.getElementById("reviewsSearchInput")?.addEventListener("input", renderReviewsAdmin);
+  document.getElementById("reviewsRatingFilter")?.addEventListener("change", renderReviewsAdmin);
   document.getElementById("onlyOpenTicketsToggle")?.addEventListener("change", renderTickets);
   document.getElementById("logsSearchInput")?.addEventListener("input", renderLogs);
 }
@@ -1078,6 +1224,7 @@ function bindActions() {
   document.getElementById("notificationForm")?.addEventListener("submit", handleNotification);
   document.getElementById("discountForm")?.addEventListener("submit", handleDiscount);
   document.getElementById("productCreateForm")?.addEventListener("submit", handleProductSave);
+  document.getElementById("reviewEditForm")?.addEventListener("submit", handleReviewEdit);
   document.getElementById("ticketChatForm")?.addEventListener("submit", sendTicketChat);
   document.getElementById("applyQuickCategoryBtn")?.addEventListener("click", applyQuickCategoryPreset);
   document.getElementById("newProductBtn")?.addEventListener("click", () => {
@@ -1086,6 +1233,7 @@ function bindActions() {
   });
   document.getElementById("clearDiscountBtn")?.addEventListener("click", clearDiscount);
   document.getElementById("cancelProductEditBtn")?.addEventListener("click", resetProductForm);
+  document.getElementById("cancelReviewEditBtn")?.addEventListener("click", resetReviewForm);
 
   document.getElementById("refreshAllBtn")?.addEventListener("click", async () => {
     await refreshAll();
@@ -1207,6 +1355,22 @@ function bindActions() {
         }
         openTab("tab-products");
         return;
+      }
+
+      if (action === "edit-review") {
+        const review = reviewsCache.find((item) => Number(item.id) === id);
+        if (review) {
+          fillReviewForm(review);
+          openTab("tab-reviews");
+          setFeedback("reviewEditFeedback", `Editando avaliação #${id}.`, "success");
+        }
+        return;
+      }
+
+      if (action === "delete-review") {
+        const confirmed = window.confirm("Excluir esta avaliação?");
+        if (!confirmed) return;
+        await apiRequest(`/admin/reviews/${id}`, { method: "DELETE" });
       }
 
       await refreshAll();

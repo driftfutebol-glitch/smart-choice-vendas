@@ -44,7 +44,7 @@ p {
 }
 
 .admin-wrap {
-  width: min(1260px, calc(100% - 1.4rem));
+  width: min(1380px, calc(100% - 1.2rem));
   margin: 1rem auto 2rem;
   display: grid;
   gap: 1rem;
@@ -54,11 +54,24 @@ p {
   border: 1px solid var(--line);
   border-radius: 16px;
   background: var(--card);
-  padding: 1rem;
+  padding: 1rem 1rem 1.05rem;
   display: grid;
   gap: 0.8rem;
   box-shadow: var(--shadow);
   backdrop-filter: blur(9px);
+  position: relative;
+  overflow: hidden;
+}
+
+.panel::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 2px;
+  background: linear-gradient(90deg, rgba(0, 212, 255, 0.75), rgba(39, 245, 168, 0.68));
+  opacity: 0.45;
 }
 
 .stack,
@@ -186,6 +199,18 @@ td {
 
 th {
   color: #9bd9ff;
+  background: rgba(7, 18, 34, 0.94);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+tbody tr:nth-child(even) {
+  background: rgba(255, 255, 255, 0.015);
+}
+
+tbody tr:hover {
+  background: rgba(0, 212, 255, 0.08);
 }
 
 td.actions {
@@ -302,18 +327,31 @@ td.actions button {
 }
 
 .admin-tabs {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
   gap: 0.45rem;
 }
 
 .tab-btn {
-  width: auto;
-  border-radius: 999px;
-  padding: 0.5rem 0.8rem;
+  width: 100%;
+  border-radius: 12px;
+  padding: 0.6rem 0.72rem;
   background: rgba(255, 255, 255, 0.08);
   color: var(--ink);
   border: 1px solid var(--line);
+  display: grid;
+  justify-items: start;
+  text-align: left;
+  gap: 0.15rem;
+}
+
+.tab-title {
+  font-weight: 700;
+}
+
+.tab-meta {
+  color: var(--muted);
+  font-size: 0.77rem;
+  min-height: auto;
 }
 
 .tab-btn.active {
@@ -321,9 +359,47 @@ td.actions button {
   color: #01121f;
 }
 
+.tab-btn.active .tab-meta {
+  color: rgba(2, 17, 31, 0.78);
+}
+
 .tab-panel {
   display: grid;
   gap: 1rem;
+}
+
+.admin-workspace {
+  display: grid;
+  gap: 0.95rem;
+}
+
+.workspace-nav {
+  align-content: start;
+  gap: 0.85rem;
+}
+
+.active-module-chip {
+  border: 1px solid rgba(39, 245, 168, 0.34);
+  border-radius: 10px;
+  padding: 0.45rem 0.62rem;
+  background: rgba(39, 245, 168, 0.08);
+  color: #a6fbe0;
+  font-size: 0.84rem;
+}
+
+.active-module-chip strong {
+  color: #fff;
+}
+
+.workspace-content {
+  display: grid;
+  gap: 1rem;
+}
+
+.dashboard-grid,
+.users-admin-grid {
+  display: grid;
+  gap: 0.85rem;
 }
 
 .toolbar-inline {
@@ -339,6 +415,11 @@ td.actions button {
 .panel-head p {
   color: var(--muted);
   font-size: 0.9rem;
+}
+
+.panel-head h2,
+.panel-head h3 {
+  letter-spacing: 0.01em;
 }
 
 .product-admin-hero {
@@ -386,6 +467,25 @@ td.actions button {
 
 .products-toolbar {
   gap: 0.5rem;
+}
+
+.reviews-toolbar-admin {
+  gap: 0.5rem;
+}
+
+.rating-pill {
+  width: fit-content;
+  border: 1px solid rgba(117, 247, 205, 0.45);
+  border-radius: 999px;
+  padding: 0.14rem 0.5rem;
+  color: #75f7cd;
+  font-size: 0.78rem;
+}
+
+.review-comment-cell {
+  max-width: 340px;
+  white-space: normal;
+  word-break: break-word;
 }
 
 .product-cell {
@@ -503,5 +603,31 @@ td.actions button {
 
   .products-toolbar {
     grid-template-columns: minmax(260px, 1fr) minmax(170px, 220px) minmax(170px, 220px) auto auto;
+  }
+
+  .reviews-toolbar-admin {
+    grid-template-columns: minmax(280px, 1fr) minmax(170px, 220px);
+    align-items: center;
+  }
+
+  .dashboard-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (min-width: 1020px) {
+  .admin-workspace {
+    grid-template-columns: 280px minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .workspace-nav {
+    position: sticky;
+    top: 1rem;
+  }
+
+  .users-admin-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    align-items: start;
   }
 }

@@ -64,262 +64,380 @@
         </article>
       </section>
 
-      <nav class="admin-tabs">
-        <button type="button" class="tab-btn active" data-tab-target="tab-dashboard">Dashboard</button>
-        <button type="button" class="tab-btn" data-tab-target="tab-users">Usuários</button>
-        <button type="button" class="tab-btn" data-tab-target="tab-products">Produtos</button>
-        <button type="button" class="tab-btn" data-tab-target="tab-orders">Pedidos</button>
-        <button type="button" class="tab-btn" data-tab-target="tab-support">Suporte</button>
-        <button type="button" class="tab-btn" data-tab-target="tab-audit">Auditoria</button>
-      </nav>
+      <section class="admin-workspace">
+        <aside class="panel workspace-nav">
+          <div class="panel-head">
+            <h3>Módulos do Painel</h3>
+            <p>Navegação organizada por área. Clique para abrir o módulo.</p>
+          </div>
+          <div class="active-module-chip">
+            Módulo ativo: <strong id="activeModuleLabel">Dashboard</strong>
+          </div>
+          <nav class="admin-tabs">
+            <button type="button" class="tab-btn active" data-tab-target="tab-dashboard">
+              <span class="tab-title">Dashboard</span>
+              <small class="tab-meta">Créditos e notificações</small>
+            </button>
+            <button type="button" class="tab-btn" data-tab-target="tab-users">
+              <span class="tab-title">Usuários</span>
+              <small class="tab-meta">Cadastro, permissões e senhas</small>
+            </button>
+            <button type="button" class="tab-btn" data-tab-target="tab-products">
+              <span class="tab-title">Produtos</span>
+              <small class="tab-meta">Catálogo, preços e promoções</small>
+            </button>
+            <button type="button" class="tab-btn" data-tab-target="tab-reviews">
+              <span class="tab-title">Avaliações</span>
+              <small class="tab-meta">Moderação de feedback</small>
+            </button>
+            <button type="button" class="tab-btn" data-tab-target="tab-orders">
+              <span class="tab-title">Pedidos</span>
+              <small class="tab-meta">Aprovação e status</small>
+            </button>
+            <button type="button" class="tab-btn" data-tab-target="tab-support">
+              <span class="tab-title">Suporte</span>
+              <small class="tab-meta">Tickets e chat humano</small>
+            </button>
+            <button type="button" class="tab-btn" data-tab-target="tab-audit">
+              <span class="tab-title">Auditoria</span>
+              <small class="tab-meta">Logs administrativos</small>
+            </button>
+          </nav>
+        </aside>
 
-      <section id="tab-dashboard" class="tab-panel">
-        <section class="panel" data-permission-gate="CREDITS_ADJUST">
-          <h2>Controle de Créditos (Master Key)</h2>
-          <form id="creditForm" class="inline-grid">
-            <input type="number" name="userId" placeholder="ID usuário" required />
-            <input type="number" name="delta" placeholder="+/- créditos" required />
-            <input type="text" name="reason" placeholder="Motivo" required />
-            <input type="password" name="masterKey" placeholder="Master Key 03142911" required />
-            <button type="submit">Aplicar ajuste</button>
-          </form>
-          <small id="creditFeedback"></small>
-        </section>
+        <div class="workspace-content">
+          <section id="tab-dashboard" class="tab-panel">
+            <section class="panel">
+              <div class="panel-head">
+                <h2>Operações rápidas</h2>
+                <p>Atalhos para ajuste de créditos e comunicação com clientes.</p>
+              </div>
+            </section>
 
-        <section class="panel" data-permission-gate="NOTIFICATIONS_MANAGE">
-          <h2>Notificações para Clientes</h2>
-          <form id="notificationForm" class="inline-grid">
-            <input type="number" name="userId" placeholder="ID usuário (vazio = todos)" />
-            <input type="text" name="title" placeholder="Título" />
-            <input type="text" name="message" placeholder="Mensagem" required />
-            <button type="submit">Enviar notificação</button>
-          </form>
-          <small id="notificationFeedback"></small>
-        </section>
-      </section>
+            <div class="dashboard-grid">
+              <section class="panel" data-permission-gate="CREDITS_ADJUST">
+                <div class="panel-head">
+                  <h2>Controle de Créditos (Master Key)</h2>
+                  <p>Insira o ID do usuário e a Master Key para confirmar alterações.</p>
+                </div>
+                <form id="creditForm" class="inline-grid">
+                  <input type="number" name="userId" placeholder="ID usuário" required />
+                  <input type="number" name="delta" placeholder="+/- créditos" required />
+                  <input type="text" name="reason" placeholder="Motivo" required />
+                  <input type="password" name="masterKey" placeholder="Master Key 03142911" required />
+                  <button type="submit">Aplicar ajuste</button>
+                </form>
+                <small id="creditFeedback"></small>
+              </section>
 
-      <section id="tab-users" class="tab-panel hidden">
-        <section class="panel" data-permission-gate="USERS_CREATE">
-          <h2>Criar Usuário / Admin</h2>
-          <form id="createUserForm" class="inline-grid">
-            <input type="text" name="name" placeholder="Nome" required />
-            <input type="email" name="email" placeholder="E-mail" required />
-            <input type="text" name="phone" placeholder="Telefone (opcional)" />
-            <input type="text" name="password" placeholder="Senha inicial forte" required />
-            <select name="role">
-              <option value="USER">USER</option>
-              <option value="ADMIN">ADMIN</option>
-            </select>
-            <select name="status_usuario">
-              <option value="ATIVO">ATIVO</option>
-              <option value="PENDING">PENDING</option>
-              <option value="INATIVO">INATIVO</option>
-            </select>
-            <input type="number" name="initialCredits" placeholder="Créditos iniciais" value="0" />
-            <button type="submit">Criar usuário</button>
-          </form>
-          <small id="createUserFeedback"></small>
-        </section>
-
-        <section class="panel" data-permission-gate="USERS_PERMISSIONS">
-          <h2>Permissões de Admin (dar / retirar)</h2>
-          <form id="permissionsForm" class="stack">
-            <div class="inline-grid">
-              <input type="number" name="targetAdminId" placeholder="ID do admin" required />
-              <button type="button" id="loadAdminPermissionsBtn">Carregar permissões</button>
-              <button type="submit">Salvar permissões</button>
+              <section class="panel" data-permission-gate="NOTIFICATIONS_MANAGE">
+                <div class="panel-head">
+                  <h2>Notificações para Clientes</h2>
+                  <p>Envie uma mensagem para um cliente específico ou para todos.</p>
+                </div>
+                <form id="notificationForm" class="inline-grid">
+                  <input type="number" name="userId" placeholder="ID usuário (vazio = todos)" />
+                  <input type="text" name="title" placeholder="Título" />
+                  <input type="text" name="message" placeholder="Mensagem" required />
+                  <button type="submit">Enviar notificação</button>
+                </form>
+                <small id="notificationFeedback"></small>
+              </section>
             </div>
-            <div id="permissionOptions" class="permission-grid"></div>
-          </form>
-          <small id="permissionsFeedback"></small>
-        </section>
+          </section>
 
-        <section class="panel" data-permission-gate="USERS_PASSWORD_RESET">
-          <h2>Reset de Senha de Usuário</h2>
-          <form id="passwordResetForm" class="inline-grid">
-            <input type="number" name="userId" placeholder="ID usuário" required />
-            <input type="text" name="newPassword" placeholder="Nova senha forte" required />
-            <input type="password" name="masterKey" placeholder="Master Key" required />
-            <button type="submit">Redefinir senha</button>
-          </form>
-          <small id="passwordResetFeedback"></small>
-        </section>
+          <section id="tab-users" class="tab-panel hidden">
+            <div class="users-admin-grid">
+              <section class="panel" data-permission-gate="USERS_CREATE">
+                <div class="panel-head">
+                  <h2>Criar Usuário / Admin</h2>
+                  <p>Cadastro manual com perfil e créditos iniciais.</p>
+                </div>
+                <form id="createUserForm" class="inline-grid">
+                  <input type="text" name="name" placeholder="Nome" required />
+                  <input type="email" name="email" placeholder="E-mail" required />
+                  <input type="text" name="phone" placeholder="Telefone (opcional)" />
+                  <input type="text" name="password" placeholder="Senha inicial forte" required />
+                  <select name="role">
+                    <option value="USER">USER</option>
+                    <option value="ADMIN">ADMIN</option>
+                  </select>
+                  <select name="status_usuario">
+                    <option value="ATIVO">ATIVO</option>
+                    <option value="PENDING">PENDING</option>
+                    <option value="INATIVO">INATIVO</option>
+                  </select>
+                  <input type="number" name="initialCredits" placeholder="Créditos iniciais" value="0" />
+                  <button type="submit">Criar usuário</button>
+                </form>
+                <small id="createUserFeedback"></small>
+              </section>
 
-        <section class="panel">
-          <h2>Usuários</h2>
-          <div class="toolbar-inline">
-            <input id="usersSearchInput" type="search" placeholder="Buscar por nome, e-mail ou ID" />
-            <label class="inline-check"><input id="onlyAdminsToggle" type="checkbox" /> Só admins</label>
-            <label class="inline-check"><input id="onlyBannedToggle" type="checkbox" /> Só banidos</label>
-          </div>
-          <div id="usersList" class="table-wrap"></div>
-        </section>
-      </section>
+              <section class="panel" data-permission-gate="USERS_PERMISSIONS">
+                <div class="panel-head">
+                  <h2>Permissões de Admin</h2>
+                  <p>Defina exatamente quais ações cada admin pode executar.</p>
+                </div>
+                <form id="permissionsForm" class="stack">
+                  <div class="inline-grid">
+                    <input type="number" name="targetAdminId" placeholder="ID do admin" required />
+                    <button type="button" id="loadAdminPermissionsBtn">Carregar permissões</button>
+                    <button type="submit">Salvar permissões</button>
+                  </div>
+                  <div id="permissionOptions" class="permission-grid"></div>
+                </form>
+                <small id="permissionsFeedback"></small>
+              </section>
 
-      <section id="tab-products" class="tab-panel hidden">
-        <section class="panel product-admin-hero">
-          <div>
-            <h2>Central de Produtos</h2>
-            <p>Editor rápido com seções/categorias personalizadas, filtros avançados e fluxo mais simples.</p>
-          </div>
-          <div id="productQuickStats" class="product-quick-stats"></div>
-        </section>
+              <section class="panel" data-permission-gate="USERS_PASSWORD_RESET">
+                <div class="panel-head">
+                  <h2>Reset de Senha</h2>
+                  <p>Redefinição segura com confirmação por Master Key.</p>
+                </div>
+                <form id="passwordResetForm" class="inline-grid">
+                  <input type="number" name="userId" placeholder="ID usuário" required />
+                  <input type="text" name="newPassword" placeholder="Nova senha forte" required />
+                  <input type="password" name="masterKey" placeholder="Master Key" required />
+                  <button type="submit">Redefinir senha</button>
+                </form>
+                <small id="passwordResetFeedback"></small>
+              </section>
+            </div>
 
-        <section class="panel" data-permission-gate="DISCOUNTS_MANAGE">
-          <h2>Descontos e Promoções</h2>
-          <form id="discountForm" class="inline-grid">
-            <input type="number" name="productId" placeholder="ID produto" required />
-            <input type="number" name="discountPercent" placeholder="Desconto %" required />
-            <label class="inline-check">
-              <input type="checkbox" name="beginnerOnly" />
-              Somente iniciantes
-            </label>
-            <button type="submit">Aplicar desconto</button>
-            <button type="button" id="clearDiscountBtn">Remover desconto</button>
-          </form>
-          <small id="discountFeedback"></small>
-        </section>
+            <section class="panel">
+              <div class="panel-head">
+                <h2>Lista de Usuários</h2>
+                <p>Busca rápida por nome, e-mail e status de administração.</p>
+              </div>
+              <div class="toolbar-inline">
+                <input id="usersSearchInput" type="search" placeholder="Buscar por nome, e-mail ou ID" />
+                <label class="inline-check"><input id="onlyAdminsToggle" type="checkbox" /> Só admins</label>
+                <label class="inline-check"><input id="onlyBannedToggle" type="checkbox" /> Só banidos</label>
+              </div>
+              <div id="usersList" class="table-wrap"></div>
+            </section>
+          </section>
 
-        <section class="panel product-studio" data-permission-gate="PRODUCTS_MANAGE">
-          <div class="panel-head">
-            <h2>Cadastrar / Editar Produtos</h2>
-            <p>Crie novas seções/categorias e mantenha o catálogo organizado.</p>
-          </div>
+          <section id="tab-products" class="tab-panel hidden">
+            <section class="panel product-admin-hero">
+              <div>
+                <h2>Central de Produtos</h2>
+                <p>Editor rápido com seções/categorias personalizadas, filtros avançados e fluxo mais simples.</p>
+              </div>
+              <div id="productQuickStats" class="product-quick-stats"></div>
+            </section>
 
-          <div class="product-quick-tools">
-            <label>Marca rápida
-              <select id="quickBrandSelect">
-                <option value="">Selecionar marca</option>
-                <option value="Redmi">Redmi</option>
-                <option value="Xiaomi">Xiaomi</option>
-                <option value="Realme">Realme</option>
-                <option value="Poco">Poco</option>
-                <option value="iPhone">iPhone</option>
-                <option value="Samsung">Samsung</option>
-              </select>
-            </label>
-            <label>Nova seção/categoria
-              <input id="quickCategoryInput" type="text" placeholder="Ex: IPHONE, CELULAR PREMIUM, ACESSORIO" list="categorySuggestions" />
-            </label>
-            <button id="applyQuickCategoryBtn" type="button">Aplicar no formulário</button>
-            <button id="newProductBtn" type="button">Novo produto</button>
-          </div>
+            <section class="panel" data-permission-gate="DISCOUNTS_MANAGE">
+              <div class="panel-head">
+                <h2>Descontos e Promoções</h2>
+                <p>Aplique ou remova descontos por produto em poucos cliques.</p>
+              </div>
+              <form id="discountForm" class="inline-grid">
+                <input type="number" name="productId" placeholder="ID produto" required />
+                <input type="number" name="discountPercent" placeholder="Desconto %" required />
+                <label class="inline-check">
+                  <input type="checkbox" name="beginnerOnly" />
+                  Somente iniciantes
+                </label>
+                <button type="submit">Aplicar desconto</button>
+                <button type="button" id="clearDiscountBtn">Remover desconto</button>
+              </form>
+              <small id="discountFeedback"></small>
+            </section>
 
-          <form id="productCreateForm" class="product-form-grid">
-            <input type="hidden" name="productId" />
+            <section class="panel product-studio" data-permission-gate="PRODUCTS_MANAGE">
+              <div class="panel-head">
+                <h2>Cadastrar / Editar Produtos</h2>
+                <p>Crie novas seções/categorias e mantenha o catálogo organizado.</p>
+              </div>
 
-            <label>Título
-              <input type="text" name="title" placeholder="Título do produto" required />
-            </label>
+              <div class="product-quick-tools">
+                <label>Marca rápida
+                  <select id="quickBrandSelect">
+                    <option value="">Selecionar marca</option>
+                    <option value="Redmi">Redmi</option>
+                    <option value="Xiaomi">Xiaomi</option>
+                    <option value="Realme">Realme</option>
+                    <option value="Poco">Poco</option>
+                    <option value="iPhone">iPhone</option>
+                    <option value="Samsung">Samsung</option>
+                  </select>
+                </label>
+                <label>Nova seção/categoria
+                  <input id="quickCategoryInput" type="text" placeholder="Ex: IPHONE, CELULAR PREMIUM, ACESSORIO" list="categorySuggestions" />
+                </label>
+                <button id="applyQuickCategoryBtn" type="button">Aplicar no formulário</button>
+                <button id="newProductBtn" type="button">Novo produto</button>
+              </div>
 
-            <label>Marca
-              <input type="text" name="brand" placeholder="Marca (Redmi, Xiaomi...)" required />
-            </label>
+              <form id="productCreateForm" class="product-form-grid">
+                <input type="hidden" name="productId" />
 
-            <label>Categoria / Seção
-              <input type="text" name="category" placeholder="CELULAR" list="categorySuggestions" required />
-            </label>
+                <label>Título
+                  <input type="text" name="title" placeholder="Título do produto" required />
+                </label>
 
-            <datalist id="categorySuggestions"></datalist>
+                <label>Marca
+                  <input type="text" name="brand" placeholder="Marca (Redmi, Xiaomi...)" required />
+                </label>
 
-            <label>Preço em dinheiro (R$)
-              <input type="number" step="0.01" name="price_cash" placeholder="Preço R$" required />
-            </label>
+                <label>Categoria / Seção
+                  <input type="text" name="category" placeholder="CELULAR" list="categorySuggestions" required />
+                </label>
 
-            <label>Preço em créditos
-              <input type="number" name="price_credits" placeholder="Preço créditos" required />
-            </label>
+                <datalist id="categorySuggestions"></datalist>
 
-            <label>Preço iniciante (opcional)
-              <input type="number" step="0.01" name="beginner_price" placeholder="Preço iniciante" />
-            </label>
+                <label>Preço em dinheiro (R$)
+                  <input type="number" step="0.01" name="price_cash" placeholder="Preço R$" required />
+                </label>
 
-            <label>Estoque
-              <input type="number" name="stock" placeholder="Estoque" required />
-            </label>
+                <label>Preço em créditos
+                  <input type="number" name="price_credits" placeholder="Preço créditos" required />
+                </label>
 
-            <label class="form-span-2">Descrição
-              <textarea name="description" rows="3" placeholder="Descrição comercial do produto" required></textarea>
-            </label>
+                <label>Preço iniciante (opcional)
+                  <input type="number" step="0.01" name="beginner_price" placeholder="Preço iniciante" />
+                </label>
 
-            <label class="form-span-2">Especificações técnicas
-              <textarea name="technical_specs" rows="3" placeholder="Ex: RAM, armazenamento, tela, processador"></textarea>
-            </label>
+                <label>Estoque
+                  <input type="number" name="stock" placeholder="Estoque" required />
+                </label>
 
-            <label class="form-span-2">URL imagem
-              <input type="text" name="image_url" placeholder="https://..." />
-            </label>
+                <label class="form-span-2">Descrição
+                  <textarea name="description" rows="3" placeholder="Descrição comercial do produto" required></textarea>
+                </label>
 
-            <label class="form-span-2">URL vídeo
-              <input type="text" name="video_url" placeholder="https://..." />
-            </label>
+                <label class="form-span-2">Especificações técnicas
+                  <textarea name="technical_specs" rows="3" placeholder="Ex: RAM, armazenamento, tela, processador"></textarea>
+                </label>
 
-            <label class="inline-check">
-              <input type="checkbox" name="is_beginner_offer" />
-              Oferta iniciante
-            </label>
+                <label class="form-span-2">URL imagem
+                  <input type="text" name="image_url" placeholder="https://..." />
+                </label>
 
-            <button id="productSubmitBtn" type="submit">Salvar produto</button>
-            <button id="cancelProductEditBtn" type="button">Cancelar edição</button>
-          </form>
-          <small id="productFeedback"></small>
-        </section>
+                <label class="form-span-2">URL vídeo
+                  <input type="text" name="video_url" placeholder="https://..." />
+                </label>
 
-        <section class="panel">
-          <h2>Produtos cadastrados</h2>
-          <div class="toolbar-inline products-toolbar">
-            <input id="productsSearchInput" type="search" placeholder="Buscar por título, marca ou ID" />
-            <select id="productsBrandFilter">
-              <option value="">Todas as marcas</option>
-            </select>
-            <select id="productsCategoryFilter">
-              <option value="">Todas as categorias</option>
-            </select>
-            <label class="inline-check"><input id="onlyActiveProductsToggle" type="checkbox" checked /> Só ativos</label>
-            <label class="inline-check"><input id="onlyPromotedProductsToggle" type="checkbox" /> Só promovidos</label>
-          </div>
-          <div id="productsList" class="table-wrap"></div>
-        </section>
-      </section>
+                <label class="inline-check">
+                  <input type="checkbox" name="is_beginner_offer" />
+                  Oferta iniciante
+                </label>
 
-      <section id="tab-orders" class="tab-panel hidden">
-        <section class="panel">
-          <h2>Pedidos (aprovar compra e liberar créditos)</h2>
-          <div id="ordersList" class="table-wrap"></div>
-        </section>
-      </section>
+                <button id="productSubmitBtn" type="submit">Salvar produto</button>
+                <button id="cancelProductEditBtn" type="button">Cancelar edição</button>
+              </form>
+              <small id="productFeedback"></small>
+            </section>
 
-      <section id="tab-support" class="tab-panel hidden">
-        <section class="panel">
-          <h2>Tickets (IA para Humano)</h2>
-        <div class="toolbar-inline">
-          <label class="inline-check"><input id="onlyOpenTicketsToggle" type="checkbox" checked /> Só abertos</label>
+            <section class="panel">
+              <div class="panel-head">
+                <h2>Produtos cadastrados</h2>
+                <p>Filtros por marca/categoria para gestão rápida do catálogo.</p>
+              </div>
+              <div class="toolbar-inline products-toolbar">
+                <input id="productsSearchInput" type="search" placeholder="Buscar por título, marca ou ID" />
+                <select id="productsBrandFilter">
+                  <option value="">Todas as marcas</option>
+                </select>
+                <select id="productsCategoryFilter">
+                  <option value="">Todas as categorias</option>
+                </select>
+                <label class="inline-check"><input id="onlyActiveProductsToggle" type="checkbox" checked /> Só ativos</label>
+                <label class="inline-check"><input id="onlyPromotedProductsToggle" type="checkbox" /> Só promovidos</label>
+              </div>
+              <div id="productsList" class="table-wrap"></div>
+            </section>
+          </section>
+
+          <section id="tab-orders" class="tab-panel hidden">
+            <section class="panel">
+              <div class="panel-head">
+                <h2>Pedidos</h2>
+                <p>Aprove pedidos pagos e acompanhe o fluxo comercial.</p>
+              </div>
+              <div id="ordersList" class="table-wrap"></div>
+            </section>
+          </section>
+
+          <section id="tab-reviews" class="tab-panel hidden">
+            <section class="panel" data-permission-gate="REVIEWS_MANAGE">
+              <div class="panel-head">
+                <h2>Gerenciar Avaliações</h2>
+                <p>Edite, modere e exclua avaliações de clientes.</p>
+              </div>
+
+              <div class="toolbar-inline reviews-toolbar-admin">
+                <input id="reviewsSearchInput" type="search" placeholder="Buscar por cliente, produto ou comentário" />
+                <select id="reviewsRatingFilter">
+                  <option value="">Todas as notas</option>
+                  <option value="5">5 estrelas</option>
+                  <option value="4">4 estrelas</option>
+                  <option value="3">3 estrelas</option>
+                  <option value="2">2 estrelas</option>
+                  <option value="1">1 estrela</option>
+                </select>
+              </div>
+
+              <div id="reviewsAdminList" class="table-wrap"></div>
+            </section>
+
+            <section class="panel" data-permission-gate="REVIEWS_MANAGE">
+              <div class="panel-head">
+                <h2>Editar Avaliação</h2>
+                <p>Atualize nota, texto e foto da avaliação selecionada.</p>
+              </div>
+              <form id="reviewEditForm" class="inline-grid">
+                <input type="number" name="reviewId" placeholder="ID avaliação" required />
+                <input type="number" name="rating" min="1" max="5" placeholder="Nota (1-5)" required />
+                <input type="text" name="photo_url" placeholder="URL da foto (opcional)" />
+                <input type="text" name="comment" placeholder="Comentário atualizado" required />
+                <button type="submit">Salvar edição</button>
+                <button id="cancelReviewEditBtn" type="button">Cancelar</button>
+              </form>
+              <small id="reviewEditFeedback"></small>
+            </section>
+          </section>
+
+          <section id="tab-support" class="tab-panel hidden">
+            <section class="panel">
+              <div class="panel-head">
+                <h2>Tickets de Suporte (IA para Humano)</h2>
+                <p>Acompanhe tickets criados pela IA e responda no chat interno.</p>
+              </div>
+              <div class="toolbar-inline">
+                <label class="inline-check"><input id="onlyOpenTicketsToggle" type="checkbox" checked /> Só abertos</label>
+              </div>
+              <div id="ticketsList" class="table-wrap"></div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-head">
+                <h3>Chat do ticket selecionado</h3>
+                <p id="ticketChatHint" class="muted">Clique em "Ver chat" em um ticket para carregar as mensagens.</p>
+              </div>
+              <div id="ticketChatMessages" class="chat-box admin-chat"></div>
+              <form id="ticketChatForm" class="chat-input">
+                <input type="text" name="message" placeholder="Responder cliente aqui" autocomplete="off" required />
+                <button class="btn btn-primary" type="submit">Enviar</button>
+              </form>
+              <small id="ticketChatFeedback"></small>
+            </section>
+          </section>
+
+          <section id="tab-audit" class="tab-panel hidden">
+            <section class="panel">
+              <div class="panel-head">
+                <h2>Logs de Atividade</h2>
+                <p>Auditoria de ações administrativas no sistema.</p>
+              </div>
+              <div class="toolbar-inline">
+                <input id="logsSearchInput" type="search" placeholder="Filtrar ação, detalhes ou ator" />
+              </div>
+              <div id="logsList" class="table-wrap"></div>
+            </section>
+          </section>
         </div>
-        <div id="ticketsList" class="table-wrap"></div>
-
-        <div class="panel">
-          <div class="panel-head">
-            <h3>Chat do ticket selecionado</h3>
-            <p id="ticketChatHint" class="muted">Clique em "Ver chat" em um ticket para carregar as mensagens.</p>
-          </div>
-          <div id="ticketChatMessages" class="chat-box admin-chat"></div>
-          <form id="ticketChatForm" class="chat-input">
-            <input type="text" name="message" placeholder="Responder cliente aqui" autocomplete="off" required />
-            <button class="btn btn-primary" type="submit">Enviar</button>
-          </form>
-          <small id="ticketChatFeedback"></small>
-        </div>
-      </section>
-    </section>
-
-      <section id="tab-audit" class="tab-panel hidden">
-        <section class="panel">
-          <h2>Logs de atividade</h2>
-          <div class="toolbar-inline">
-            <input id="logsSearchInput" type="search" placeholder="Filtrar ação, detalhes ou ator" />
-          </div>
-          <div id="logsList" class="table-wrap"></div>
-        </section>
       </section>
     </section>
   </main>

@@ -651,10 +651,12 @@ app.get("/api/products", optionalAuth, async (req, res) => {
       };
     });
 
+    const brandRows = await db.all("SELECT DISTINCT brand FROM products WHERE is_active = 1 ORDER BY brand ASC");
+
     return res.json({
       ok: true,
       beginner_days_limit: BEGINNER_DAYS,
-      brands: ["Xiaomi", "Redmi", "Realme", "iPhone", "Samsung"],
+      brands: brandRows.map((row) => row.brand),
       products: normalized
     });
   } catch (error) {

@@ -7,6 +7,35 @@ const { ADMIN_PERMISSIONS, DEFAULT_ADMIN_PERMISSIONS } = require("./permissions"
 const DB_PATH = path.join(__dirname, "..", "data.sqlite");
 let db;
 
+const DEFAULT_PRODUCTS = [
+  { model: "Redmi Note 14", storage: "128GB", price: 1318.8, brand: "Redmi", image: "https://images.unsplash.com/photo-1610945265064-0e34e5519bbf?auto=format&fit=crop&w=900&q=80" },
+  { model: "Redmi Note 14", storage: "256GB", price: 1438.8, brand: "Redmi", image: "https://images.unsplash.com/photo-1610792516307-ea5acd9c3b00?auto=format&fit=crop&w=900&q=80" },
+  { model: "Redmi Note 14 Pro", storage: "128GB", price: 1678.8, brand: "Redmi", image: "https://images.unsplash.com/photo-1580910051074-3eb694886505?auto=format&fit=crop&w=900&q=80" },
+  { model: "Redmi Note 15 Pro 5G", storage: "256GB", price: 2518.8, brand: "Redmi", image: "https://images.unsplash.com/photo-1546054454-aa26e2b734c7?auto=format&fit=crop&w=900&q=80" },
+  { model: "Redmi Note 14 Pro 5G", storage: "256GB", price: 2278.8, brand: "Redmi", image: "https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?auto=format&fit=crop&w=900&q=80" },
+  { model: "Redmi Note 13", storage: "128GB", price: 1198.8, brand: "Redmi", image: "https://images.unsplash.com/photo-1598327105666-5b89351aff97?auto=format&fit=crop&w=900&q=80" },
+  { model: "Redmi Note 13", storage: "256GB", price: 1378.8, brand: "Redmi", image: "https://images.unsplash.com/photo-1610945264803-c22b62d2a7b3?auto=format&fit=crop&w=900&q=80" },
+  { model: "Redmi 13C", storage: "128GB", price: 898.8, brand: "Redmi", image: "https://images.unsplash.com/photo-1581291518857-4e27b48ff24e?auto=format&fit=crop&w=900&q=80" },
+  { model: "Redmi 14C", storage: "256GB", price: 1078.8, brand: "Redmi", image: "https://images.unsplash.com/photo-1517336714731-489689fd1ca8?auto=format&fit=crop&w=900&q=80" },
+  { model: "Redmi 14C", storage: "256GB", price: 1138.8, brand: "Redmi", image: "https://images.unsplash.com/photo-1510557880182-3d4d3cba35a5?auto=format&fit=crop&w=900&q=80" },
+  { model: "Redmi 15C", storage: "256GB", price: 1198.8, brand: "Redmi", image: "https://images.unsplash.com/photo-1523475472560-d2df97ec485c?auto=format&fit=crop&w=900&q=80" },
+  { model: "Redmi 15C", storage: "128GB", price: 1050, brand: "Redmi", image: "https://images.unsplash.com/photo-1510554310700-42d6557f97d3?auto=format&fit=crop&w=900&q=80" },
+  { model: "Redmi A5", storage: "64GB", price: 838.8, brand: "Redmi", image: "https://images.unsplash.com/photo-1483478550801-ceba5fe50e8e?auto=format&fit=crop&w=900&q=80" },
+  { model: "Redmi A5", storage: "128GB", price: 930, brand: "Redmi", image: "https://images.unsplash.com/photo-1508896694512-1eade5586796?auto=format&fit=crop&w=900&q=80" },
+  { model: "Realme C63", storage: "256GB", price: 1258.8, brand: "Realme", image: "https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?auto=format&fit=crop&w=900&q=80" },
+  { model: "Realme C67", storage: "256GB", price: 1318.8, brand: "Realme", image: "https://images.unsplash.com/photo-1526045612212-70caf35c14df?auto=format&fit=crop&w=900&q=80" },
+  { model: "Realme C75", storage: "256GB", price: 1498.8, brand: "Realme", image: "https://images.unsplash.com/photo-1545239351-1141bd82e8a6?auto=format&fit=crop&w=900&q=80" },
+  { model: "Poco M7 Pro 5G", storage: "256GB", price: 1798.8, brand: "Poco", image: "https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?auto=format&fit=crop&w=900&q=80" },
+  { model: "Realme Note 60X", storage: "64GB", price: 778.8, brand: "Realme", image: "https://images.unsplash.com/photo-1580910051074-3eb694886505?auto=format&fit=crop&w=900&q=80" },
+  { model: "Realme Note 60", storage: "128GB", price: 930, brand: "Realme", image: "https://images.unsplash.com/photo-1610945265064-0e34e5519bbf?auto=format&fit=crop&w=900&q=80" },
+  { model: "Poco X7 5G", storage: "512GB", price: 2338.8, brand: "Poco", image: "https://images.unsplash.com/photo-1610792516307-ea5acd9c3b00?auto=format&fit=crop&w=900&q=80" },
+  { model: "Poco X7 Pro 5G", storage: "256GB", price: 2518.8, brand: "Poco", image: "https://images.unsplash.com/photo-1546054454-aa26e2b734c7?auto=format&fit=crop&w=900&q=80" },
+  { model: "Poco X7 Pro 5G", storage: "512GB", price: 2878.8, brand: "Poco", image: "https://images.unsplash.com/photo-1598327105666-5b89351aff97?auto=format&fit=crop&w=900&q=80" },
+  { model: "Poco X7 5G", storage: "256GB", price: 2038.8, brand: "Poco", image: "https://images.unsplash.com/photo-1610945264803-c22b62d2a7b3?auto=format&fit=crop&w=900&q=80" },
+  { model: "Poco C71", storage: "128GB", price: 930, brand: "Poco", image: "https://images.unsplash.com/photo-1517336714731-489689fd1ca8?auto=format&fit=crop&w=900&q=80" },
+  { model: "Poco C71", storage: "64GB", price: 810, brand: "Poco", image: "https://images.unsplash.com/photo-1581291518857-4e27b48ff24e?auto=format&fit=crop&w=900&q=80" }
+];
+
 async function connectDb() {
   if (db) {
     return db;
@@ -48,6 +77,30 @@ async function ensureDefaultPermissionsForAdmins(conn, ownerId) {
       }
     }
   }
+}
+
+async function seedDefaultProducts(conn) {
+  const stmt = await conn.prepare(
+    `
+    INSERT INTO products (title, brand, category, description, technical_specs, price_cash, price_credits, beginner_price, discount_percent, image_url, video_url, stock, is_beginner_offer, promoted)
+    VALUES (?, ?, 'CELULAR', ?, ?, ?, 3000, NULL, 0, ?, '', 25, 1, ?)
+    `
+  );
+
+  for (const [index, product] of DEFAULT_PRODUCTS.entries()) {
+    const promoted = index < 6 ? 1 : 0;
+    await stmt.run(
+      `${product.model} - ${product.storage}`,
+      product.brand,
+      `${product.model} com armazenamento de ${product.storage}.`,
+      `Armazenamento: ${product.storage}`,
+      product.price,
+      product.image,
+      promoted
+    );
+  }
+
+  await stmt.finalize();
 }
 
 async function initSchema(conn) {
@@ -328,104 +381,7 @@ async function initSchema(conn) {
 
   const productCount = await conn.get("SELECT COUNT(*) AS total FROM products");
   if (!productCount || productCount.total === 0) {
-    await conn.run(
-      `
-      INSERT INTO products (title, brand, category, description, technical_specs, price_cash, price_credits, beginner_price, discount_percent, image_url, video_url, stock, is_beginner_offer, promoted)
-      VALUES
-      (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?),
-      (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?),
-      (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?),
-      (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?),
-      (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?),
-      (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `,
-      [
-        "Redmi Note 13",
-        "Redmi",
-        "CELULAR",
-        "Smartphone custo-beneficio com tela AMOLED e bateria forte.",
-        "8GB RAM, 256GB, AMOLED 120Hz",
-        1599,
-        850,
-        1399,
-        12,
-        "https://images.unsplash.com/photo-1616348436168-de43ad0db179?auto=format&fit=crop&w=900&q=60",
-        "",
-        40,
-        1,
-        1,
-        "Xiaomi 13 Lite",
-        "Xiaomi",
-        "CELULAR",
-        "Modelo premium intermediario da Xiaomi para performance diaria.",
-        "8GB RAM, 256GB",
-        2199,
-        1100,
-        1999,
-        10,
-        "https://images.unsplash.com/photo-1610792516307-ea5acd9c3b00?auto=format&fit=crop&w=900&q=60",
-        "",
-        22,
-        1,
-        1,
-        "Realme 12 Pro",
-        "Realme",
-        "CELULAR",
-        "Camera destacada com bom desempenho para redes sociais.",
-        "8GB RAM, 256GB",
-        2399,
-        1200,
-        2199,
-        8,
-        "https://images.unsplash.com/photo-1580910051074-3eb694886505?auto=format&fit=crop&w=900&q=60",
-        "",
-        19,
-        1,
-        1,
-        "iPhone 14",
-        "iPhone",
-        "CELULAR",
-        "Performance premium com ecossistema Apple.",
-        "6GB RAM, 128GB",
-        3999,
-        1900,
-        3799,
-        5,
-        "https://images.unsplash.com/photo-1678652197831-2d180705cd2c?auto=format&fit=crop&w=900&q=60",
-        "",
-        18,
-        0,
-        0,
-        "Galaxy S24",
-        "Samsung",
-        "CELULAR",
-        "Camera e IA para uso profissional e pessoal.",
-        "8GB RAM, 256GB",
-        4299,
-        2050,
-        4099,
-        4,
-        "https://images.unsplash.com/photo-1592899677977-9c10ca588bbd?auto=format&fit=crop&w=900&q=60",
-        "",
-        15,
-        0,
-        0,
-        "Fone Bluetooth Pro",
-        "Xiaomi",
-        "ACESSORIO",
-        "Acessorio com cancelamento de ruido para dia a dia.",
-        "Bluetooth 5.3, ANC",
-        299,
-        180,
-        259,
-        10,
-        "https://images.unsplash.com/photo-1583394838336-acd977736f90?auto=format&fit=crop&w=900&q=60",
-        "",
-        80,
-        1,
-        1
-      ]
-    );
+    await seedDefaultProducts(conn);
   }
 }
 

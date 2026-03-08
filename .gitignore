@@ -1,6 +1,8 @@
 # Dependencies
 node_modules/
 server/node_modules/
+desktop-admin/node_modules/
+desktop-admin/dist/
 
 # Runtime / database
 server/data.sqlite

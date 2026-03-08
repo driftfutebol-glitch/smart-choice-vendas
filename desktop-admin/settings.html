@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Configurações - Smart Choice Admin Desktop</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Sora:wght@400;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="settings.css" />
+</head>
+<body>
+  <main class="wrap">
+    <header class="header">
+      <h1>Configurar Admin Desktop</h1>
+      <p>Essas URLs controlam qual painel e qual API o aplicativo usa.</p>
+    </header>
+
+    <form id="settingsForm" class="card">
+      <label>
+        URL do painel web
+        <input
+          type="url"
+          name="panelUrl"
+          placeholder="https://smart-choice-vendas.pages.dev/painel-admin-pedro-oculto.html"
+          required
+        />
+      </label>
+
+      <label>
+        URL da API backend
+        <input
+          type="url"
+          name="apiUrl"
+          placeholder="https://smart-choice-vendas.onrender.com/api"
+          required
+        />
+      </label>
+
+      <div class="hint">
+        <strong>Dica:</strong> normalmente você só usa:
+        <code>https://smart-choice-vendas.onrender.com/api</code>
+      </div>
+
+      <div class="actions">
+        <button type="button" id="resetBtn" class="ghost">Restaurar padrão</button>
+        <button type="submit" class="primary">Salvar e recarregar painel</button>
+      </div>
+
+      <small id="feedback"></small>
+    </form>
+  </main>
+
+  <script src="settings.js"></script>
+</body>
+</html>

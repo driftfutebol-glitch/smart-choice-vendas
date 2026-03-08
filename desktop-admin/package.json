@@ -1,0 +1,49 @@
+{
+  "name": "smart-choice-admin-desktop",
+  "version": "1.0.0",
+  "description": "Painel Admin Desktop interligado ao Smart Choice Vendas",
+  "main": "main.js",
+  "author": "Smart Choice Vendas",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron .",
+    "build": "electron-builder --win nsis",
+    "build-portable": "electron-builder --win portable"
+  },
+  "devDependencies": {
+    "electron": "^35.0.1",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.smartchoicevendas.admin",
+    "productName": "Smart Choice Admin",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "settings.html",
+      "settings.css",
+      "settings.js"
+    ],
+    "win": {
+      "signAndEditExecutable": false,
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
+  }
+}

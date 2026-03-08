@@ -16,6 +16,7 @@ Projeto full-stack para loja de celulares e acessorios com:
 - `index.html` + `styles.css` + `script.js`: frontend principal (cliente).
 - `painel-admin-pedro-oculto.html` + `admin.css` + `admin.js`: painel admin (URL oculta).
 - `server/`: API Node/Express + SQLite.
+- `desktop-admin/`: app desktop Electron para gerar `.exe` do painel admin.
 
 ## Credenciais iniciais
 

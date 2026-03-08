@@ -1,0 +1,120 @@
+:root {
+  --bg: #060d1b;
+  --card: #0f1a31;
+  --line: #1f3358;
+  --text: #e6f1ff;
+  --muted: #9db3d6;
+  --primary: #17b9ff;
+  --primary-2: #2d75ff;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+  background:
+    radial-gradient(circle at 12% 10%, rgba(53, 103, 255, 0.28), transparent 40%),
+    radial-gradient(circle at 88% 86%, rgba(23, 185, 255, 0.18), transparent 44%),
+    var(--bg);
+  color: var(--text);
+  font-family: "Sora", sans-serif;
+}
+
+.wrap {
+  max-width: 580px;
+  margin: 0 auto;
+  padding: 26px;
+}
+
+.header h1 {
+  margin: 0 0 8px;
+  font-family: "Rajdhani", sans-serif;
+  letter-spacing: 0.04em;
+}
+
+.header p {
+  margin: 0 0 16px;
+  color: var(--muted);
+}
+
+.card {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 16px;
+  background: rgba(9, 17, 32, 0.86);
+  display: grid;
+  gap: 12px;
+}
+
+label {
+  display: grid;
+  gap: 6px;
+  font-size: 0.92rem;
+}
+
+input {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #071021;
+  color: var(--text);
+  padding: 10px 12px;
+  font: inherit;
+}
+
+input:focus {
+  outline: 2px solid rgba(23, 185, 255, 0.48);
+  outline-offset: 1px;
+}
+
+.hint {
+  border: 1px solid rgba(23, 185, 255, 0.3);
+  border-radius: 12px;
+  background: rgba(23, 185, 255, 0.08);
+  padding: 10px;
+  color: #cbe9ff;
+  display: grid;
+  gap: 4px;
+}
+
+code {
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 0.84rem;
+}
+
+.actions {
+  margin-top: 4px;
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+button {
+  border-radius: 10px;
+  border: 1px solid transparent;
+  padding: 10px 14px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+button.primary {
+  background: linear-gradient(120deg, var(--primary), var(--primary-2));
+  color: #031022;
+}
+
+button.ghost {
+  background: #0a1428;
+  border-color: var(--line);
+  color: var(--text);
+}
+
+#feedback {
+  min-height: 18px;
+  color: #7bffca;
+}

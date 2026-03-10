@@ -402,6 +402,78 @@ td.actions button {
   gap: 0.85rem;
 }
 
+.orders-kanban {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.kanban-col {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.02);
+  padding: 0.55rem;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.kanban-col-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.kanban-col-head h4 {
+  font-size: 0.92rem;
+}
+
+.kanban-count {
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.kanban-list {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.kanban-card {
+  border: 1px solid rgba(137, 196, 255, 0.24);
+  border-radius: 10px;
+  background: rgba(5, 16, 30, 0.8);
+  padding: 0.55rem;
+  display: grid;
+  gap: 0.4rem;
+}
+
+.kanban-card-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.45rem;
+  align-items: center;
+}
+
+.kanban-card strong {
+  font-size: 0.9rem;
+}
+
+.kanban-card p {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.kanban-card .actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.kanban-card .actions button {
+  width: auto;
+  font-size: 0.74rem;
+  padding: 0.34rem 0.46rem;
+}
+
 .toolbar-inline {
   display: grid;
   gap: 0.55rem;
@@ -613,6 +685,10 @@ td.actions button {
   .dashboard-grid {
     grid-template-columns: 1fr 1fr;
   }
+
+  .orders-kanban {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (min-width: 1020px) {
@@ -629,5 +705,237 @@ td.actions button {
   .users-admin-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
     align-items: start;
+  }
+
+  .orders-kanban {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* ---------- Admin tech refresh v2 ---------- */
+:root {
+  --bg: #050912;
+  --bg-soft: #0a1528;
+  --card: rgba(9, 20, 39, 0.88);
+  --line: rgba(83, 234, 255, 0.26);
+  --ink: #e8f8ff;
+  --muted: #8ea9c7;
+  --accent: #34f3ff;
+  --accent-2: #a7ff6d;
+  --danger: #ff6262;
+  --shadow: 0 22px 46px rgba(0, 0, 0, 0.5);
+}
+
+body {
+  background:
+    radial-gradient(circle at 10% 8%, rgba(52, 243, 255, 0.18), transparent 27%),
+    radial-gradient(circle at 88% 88%, rgba(255, 88, 176, 0.14), transparent 32%),
+    linear-gradient(150deg, #030812 0%, #071121 52%, #0a1627 100%);
+  position: relative;
+}
+
+body::before,
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: -1;
+}
+
+body::before {
+  background:
+    repeating-linear-gradient(
+      118deg,
+      transparent 0 9%,
+      rgba(52, 243, 255, 0.11) 9.3% 9.9%,
+      transparent 10.3% 20%
+    ),
+    repeating-linear-gradient(
+      68deg,
+      transparent 0 13%,
+      rgba(167, 255, 109, 0.08) 13.2% 13.7%,
+      transparent 14.1% 25%
+    );
+  opacity: 0.42;
+  animation: adminLightningDrift 18s linear infinite;
+}
+
+body::after {
+  background:
+    radial-gradient(circle at 24% 24%, rgba(52, 243, 255, 0.17), transparent 24%),
+    radial-gradient(circle at 75% 18%, rgba(255, 88, 176, 0.13), transparent 23%),
+    radial-gradient(circle at 68% 74%, rgba(167, 255, 109, 0.12), transparent 24%);
+  opacity: 0.58;
+}
+
+@keyframes adminLightningDrift {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(1%, -1%, 0);
+  }
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+.panel {
+  background: linear-gradient(160deg, rgba(9, 20, 39, 0.92), rgba(7, 16, 31, 0.9));
+  border-color: var(--line);
+  box-shadow: var(--shadow);
+}
+
+.panel::before {
+  opacity: 0.74;
+  background: linear-gradient(90deg, var(--accent), #58b8ff, #ff58b0, var(--accent-2));
+}
+
+.admin-top {
+  border-width: 1.4px;
+}
+
+.kpis article,
+.kanban-col,
+.kanban-card,
+.trend-list li,
+.perm-item,
+.active-module-chip,
+.table-wrap,
+.product-quick-stats article {
+  background: rgba(9, 20, 39, 0.8);
+}
+
+.kpis article p,
+.kpis p,
+.trend-list strong,
+.product-quick-stats strong {
+  color: #b9ff8f;
+}
+
+input,
+button,
+textarea,
+select {
+  border-color: rgba(83, 234, 255, 0.24);
+}
+
+input,
+textarea,
+select {
+  background: rgba(5, 14, 28, 0.84);
+  color: var(--ink);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: #7f96b2;
+}
+
+button {
+  background: linear-gradient(135deg, var(--accent), #4ac9ff, #88ffb6);
+  color: #03111b;
+  box-shadow: 0 10px 24px rgba(52, 243, 255, 0.28);
+}
+
+button:hover {
+  transform: translateY(-1px);
+}
+
+button.danger {
+  background: linear-gradient(135deg, #ff5e7c, #ff6262);
+  color: #fff;
+}
+
+.tab-btn {
+  background: rgba(52, 243, 255, 0.06);
+  border-color: rgba(83, 234, 255, 0.26);
+}
+
+.tab-btn:hover {
+  background: rgba(52, 243, 255, 0.1);
+}
+
+.tab-btn.active {
+  background: linear-gradient(135deg, var(--accent), #58b8ff, #88ffb6);
+  color: #04121b;
+  border-color: transparent;
+}
+
+.tab-btn.active .tab-meta {
+  color: rgba(4, 18, 27, 0.82);
+}
+
+.toolbar-inline input[type="search"],
+.toolbar-inline input[type="number"] {
+  background: rgba(5, 14, 28, 0.92);
+}
+
+th {
+  color: #c7f3ff;
+  background: rgba(5, 14, 28, 0.95);
+}
+
+tbody tr:hover {
+  background: rgba(52, 243, 255, 0.12);
+}
+
+td.actions button {
+  box-shadow: none;
+}
+
+.badge {
+  color: #b8ddff;
+}
+
+.badge.ok {
+  color: #a7ff6d;
+}
+
+.badge.warn {
+  color: #ffd783;
+}
+
+.chat-box {
+  background: rgba(4, 11, 23, 0.88);
+  border-color: rgba(83, 234, 255, 0.22);
+}
+
+.chat-message {
+  background: rgba(8, 20, 39, 0.85);
+}
+
+.chat-message.admin {
+  border-color: rgba(167, 255, 109, 0.56);
+}
+
+.chat-message.user {
+  border-color: rgba(83, 234, 255, 0.58);
+}
+
+.admin-chat {
+  min-height: 220px;
+  max-height: 340px;
+}
+
+.ticket-response-box textarea {
+  background: rgba(5, 14, 28, 0.9);
+  border-color: rgba(83, 234, 255, 0.22);
+}
+
+@media (max-width: 759px) {
+  body::before,
+  body::after {
+    opacity: 0.32;
+  }
+
+  .panel {
+    border-radius: 14px;
+    padding: 0.85rem;
+  }
+
+  .tab-btn {
+    padding: 0.56rem 0.62rem;
   }
 }

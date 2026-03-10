@@ -30,6 +30,21 @@ const WOMENS_CAMPAIGN_DISCOUNT_PERCENT = Math.max(0, Math.min(80, Number(process
 const WOMENS_CAMPAIGN_MARKUP_PERCENT = Math.max(0, Math.min(80, Number(process.env.WOMENS_CAMPAIGN_MARKUP_PERCENT || 12)));
 const CHECKOUT_CREDIT_COUPON_COST = Math.max(1, Math.min(1000, Number(process.env.CHECKOUT_CREDIT_COUPON_COST || 50)));
 const CHECKOUT_CREDIT_COUPON_PERCENT = Math.max(0, Math.min(30, Number(process.env.CHECKOUT_CREDIT_COUPON_PERCENT || 5)));
+const LOW_STOCK_THRESHOLD_DEFAULT = Math.max(1, Math.min(100, Number(process.env.LOW_STOCK_THRESHOLD_DEFAULT || 5)));
+
+const ORDER_STATUS_COLUMNS = Object.freeze([
+  "PENDING",
+  "PAID",
+  "PROCESSING",
+  "SHIPPED",
+  "DELIVERED",
+  "CANCELLED"
+]);
+
+const ORDER_STATUS_ALIAS = Object.freeze({
+  APPROVED: "PAID",
+  ANSWERED: "PROCESSING"
+});
 
 const SEED_PRODUCTS = [
   { title: "Redmi Note 14", brand: "Xiaomi", storage: "128GB", price: 1318.8, image: "https://images.unsplash.com/photo-1610945415295-d9bbf067e59c?auto=format&fit=crop&w=900&q=70" },
@@ -109,6 +124,61 @@ function applyCampaignDiscount(priceCash, campaign) {
   return roundMoney(discounted);
 }
 
+function normalizeOrderStatus(rawStatus) {
+  const normalized = String(rawStatus || "").trim().toUpperCase();
+  if (ORDER_STATUS_ALIAS[normalized]) {
+    return ORDER_STATUS_ALIAS[normalized];
+  }
+  return normalized;
+}
+
+function isValidOrderStatus(rawStatus) {
+  const status = normalizeOrderStatus(rawStatus);
+  return ORDER_STATUS_COLUMNS.includes(status);
+}
+
+function isPurchasedStatus(rawStatus) {
+  const status = normalizeOrderStatus(rawStatus);
+  return ["PAID", "PROCESSING", "SHIPPED", "DELIVERED"].includes(status);
+}
+
+async function getActiveCampaign(db, referenceDate = new Date()) {
+  const fallback = getWomensCampaignWindow(referenceDate);
+  const nowIso = (referenceDate instanceof Date ? referenceDate : new Date(referenceDate)).toISOString();
+
+  try {
+    const campaign = await db.get(
+      `
+      SELECT id, name, discount_percent, campaign_markup_percent, start_at, end_at, is_active, priority
+      FROM campaigns
+      WHERE is_active = 1
+        AND datetime(start_at) <= datetime(?)
+        AND datetime(end_at) > datetime(?)
+      ORDER BY priority DESC, id DESC
+      LIMIT 1
+      `,
+      [nowIso, nowIso]
+    );
+
+    if (!campaign) {
+      return fallback;
+    }
+
+    return {
+      id: campaign.id,
+      name: String(campaign.name || fallback.name),
+      active: true,
+      campaign_markup_percent: Math.max(0, Math.min(80, Number(campaign.campaign_markup_percent || 0))),
+      discount_percent: Math.max(0, Math.min(80, Number(campaign.discount_percent || 0))),
+      start_at: campaign.start_at,
+      end_at: campaign.end_at,
+      source: "admin_campaign"
+    };
+  } catch (_error) {
+    return fallback;
+  }
+}
+
 async function seedProducts(db, force = false) {
   const existing = await db.get("SELECT COUNT(*) as total FROM products");
   if (!force && existing && existing.total > 0) {
@@ -135,6 +205,27 @@ async function seedProducts(db, force = false) {
   await stmt.finalize();
   await db.exec("COMMIT");
   return true;
+}
+
+async function ensureDefaultCampaign(db) {
+  const count = await db.get("SELECT COUNT(*) AS total FROM campaigns").catch(() => ({ total: 0 }));
+  if (Number(count?.total || 0) > 0) {
+    return;
+  }
+
+  const startAt = new Date(WOMENS_CAMPAIGN_START);
+  const endAt = new Date(WOMENS_CAMPAIGN_END);
+  if (Number.isNaN(startAt.getTime()) || Number.isNaN(endAt.getTime()) || endAt <= startAt) {
+    return;
+  }
+
+  await db.run(
+    `
+    INSERT INTO campaigns (name, discount_percent, campaign_markup_percent, start_at, end_at, is_active, priority, updated_at)
+    VALUES (?, ?, ?, ?, ?, 1, 10, datetime('now'))
+    `,
+    [WOMENS_CAMPAIGN_NAME, WOMENS_CAMPAIGN_DISCOUNT_PERCENT, WOMENS_CAMPAIGN_MARKUP_PERCENT, startAt.toISOString(), endAt.toISOString()]
+  ).catch(() => {});
 }
 
 function sanitizePermissions(input) {
@@ -244,8 +335,28 @@ function toBool(value) {
   return false;
 }
 
+function normalizePaymentMethod(value) {
+  const normalized = String(value || "PIX").trim().toUpperCase();
+  const allowed = ["PIX", "WHATSAPP", "CARTAO", "BOLETO"];
+  return allowed.includes(normalized) ? normalized : "PIX";
+}
+
+function normalizeCheckoutChannel(value) {
+  const normalized = String(value || "CHAT_HUMANO").trim().toUpperCase();
+  const allowed = ["CHAT_HUMANO", "WHATSAPP"];
+  return allowed.includes(normalized) ? normalized : "CHAT_HUMANO";
+}
+
+function parseRequiredDate(value, fieldName) {
+  const date = new Date(String(value || ""));
+  if (Number.isNaN(date.getTime())) {
+    throw new Error(`Data invalida para ${fieldName}`);
+  }
+  return date.toISOString();
+}
+
 async function loadTicketForAccess(db, ticketId, auth) {
-  const ticket = await db.get("SELECT id, user_id FROM tickets WHERE id = ?", [ticketId]);
+  const ticket = await db.get("SELECT id, user_id, status FROM tickets WHERE id = ?", [ticketId]);
   if (!ticket) {
     return { error: "Ticket nao encontrado", status: 404 };
   }
@@ -258,6 +369,14 @@ async function loadTicketForAccess(db, ticketId, auth) {
   }
 
   return { ticket };
+}
+
+function normalizeTicketStatus(status) {
+  return String(status || "").trim().toUpperCase();
+}
+
+function isTicketClosedStatus(status) {
+  return ["ANSWERED", "CLOSED", "RESOLVED"].includes(normalizeTicketStatus(status));
 }
 
 function isStrongPassword(password) {
@@ -684,12 +803,52 @@ app.post("/api/me/notifications/:id/read", authRequired, async (req, res) => {
   }
 });
 
+app.get("/api/me/orders", authRequired, async (req, res) => {
+  try {
+    const db = await getDb();
+    const limit = Math.max(1, Math.min(80, toInt(req.query.limit, 25)));
+
+    const rows = await db.all(
+      `
+      SELECT o.id, o.product_id, p.title AS product_title, p.brand AS product_brand, p.image_url,
+             o.quantity, o.total_cash, o.total_credits, o.credit_reward, o.status, o.created_at,
+             o.approved_at, o.status_updated_at, o.payment_method, o.checkout_channel
+      FROM orders o
+      JOIN products p ON p.id = o.product_id
+      WHERE o.user_id = ?
+      ORDER BY o.id DESC
+      LIMIT ?
+      `,
+      [req.auth.sub, limit]
+    );
+
+    const withReviewStatus = [];
+    for (const row of rows) {
+      const review = await db.get(
+        "SELECT id FROM reviews WHERE user_id = ? AND product_id = ? LIMIT 1",
+        [req.auth.sub, row.product_id]
+      );
+
+      withReviewStatus.push({
+        ...row,
+        status: normalizeOrderStatus(row.status),
+        can_review: isPurchasedStatus(row.status) && !review,
+        already_reviewed: Boolean(review)
+      });
+    }
+
+    return res.json({ ok: true, orders: withReviewStatus });
+  } catch (error) {
+    return res.status(500).json({ error: "Falha ao carregar pedidos do usuario" });
+  }
+});
+
 app.get("/api/products", optionalAuth, async (req, res) => {
   try {
     const db = await getDb();
     const brand = String(req.query.brand || "").trim();
     const onlyBeginner = String(req.query.onlyBeginner || "0") === "1";
-    const campaign = getWomensCampaignWindow();
+    const campaign = await getActiveCampaign(db);
 
     let query = "SELECT * FROM products WHERE is_active = 1";
     const params = [];
@@ -763,7 +922,7 @@ app.get("/api/reviews", async (req, res) => {
 
     const rows = await db.all(
       `
-      SELECT r.id, r.product_id, r.rating, r.comment, r.photo_url, r.created_at,
+      SELECT r.id, r.product_id, r.rating, r.comment, r.photo_url, r.created_at, r.verified_purchase,
              u.name AS user_name, p.title AS product_title, p.brand AS product_brand
       FROM reviews r
       JOIN users u ON u.id = r.user_id
@@ -805,7 +964,7 @@ app.get("/api/products/:id/reviews", async (req, res) => {
 
     const rows = await db.all(
       `
-      SELECT r.id, r.rating, r.comment, r.photo_url, r.created_at, u.name
+      SELECT r.id, r.rating, r.comment, r.photo_url, r.created_at, r.verified_purchase, u.name
       FROM reviews r
       JOIN users u ON u.id = r.user_id
       JOIN products p ON p.id = r.product_id
@@ -842,12 +1001,37 @@ app.post("/api/reviews", authRequired, async (req, res) => {
       return res.status(404).json({ error: "Produto nao encontrado para avaliacao" });
     }
 
+    const existingReview = await db.get("SELECT id FROM reviews WHERE user_id = ? AND product_id = ? LIMIT 1", [
+      req.auth.sub,
+      productId
+    ]);
+    if (existingReview) {
+      return res.status(400).json({ error: "Voce ja avaliou este produto." });
+    }
+
+    const purchaseOrder = await db.get(
+      `
+      SELECT id, status
+      FROM orders
+      WHERE user_id = ?
+        AND product_id = ?
+        AND status IN ('PAID','PROCESSING','SHIPPED','DELIVERED','APPROVED')
+      ORDER BY id DESC
+      LIMIT 1
+      `,
+      [req.auth.sub, productId]
+    );
+
+    if (!purchaseOrder) {
+      return res.status(403).json({ error: "Avaliacao permitida apenas para clientes que compraram este produto." });
+    }
+
     await db.run(
       `
-      INSERT INTO reviews (user_id, product_id, rating, comment, photo_url)
-      VALUES (?, ?, ?, ?, ?)
+      INSERT INTO reviews (user_id, product_id, rating, comment, photo_url, verified_purchase, order_id)
+      VALUES (?, ?, ?, ?, ?, 1, ?)
       `,
-      [req.auth.sub, productId, rating, comment, photoUrl]
+      [req.auth.sub, productId, rating, comment, photoUrl, purchaseOrder.id]
     );
 
     await logActivity(db, {
@@ -869,7 +1053,9 @@ app.post("/api/orders/cash", authRequired, async (req, res) => {
     const productId = toInt(req.body.productId);
     const quantity = Math.max(1, toInt(req.body.quantity, 1));
     const useCreditCoupon = toBool(req.body.useCreditCoupon);
-    const campaign = getWomensCampaignWindow();
+    const paymentMethod = normalizePaymentMethod(req.body.paymentMethod);
+    const checkoutChannel = normalizeCheckoutChannel(req.body.paymentChannel || req.body.checkoutChannel);
+    const campaign = await getActiveCampaign(db);
 
     const product = await db.get("SELECT * FROM products WHERE id = ? AND is_active = 1", [productId]);
     if (!product) {
@@ -894,10 +1080,23 @@ app.post("/api/orders/cash", authRequired, async (req, res) => {
     try {
       const result = await db.run(
         `
-        INSERT INTO orders (user_id, product_id, quantity, total_cash, total_credits, status, credit_reward)
-        VALUES (?, ?, ?, ?, 0, 'PENDING', ?)
+        INSERT INTO orders (
+          user_id, product_id, quantity, total_cash, total_credits, status, credit_reward,
+          payment_method, checkout_channel, coupon_credits_used, coupon_discount_percent, status_updated_at
+        )
+        VALUES (?, ?, ?, ?, 0, 'PENDING', ?, ?, ?, ?, ?, datetime('now'))
         `,
-        [req.auth.sub, productId, quantity, totalCash, creditReward]
+        [
+          req.auth.sub,
+          productId,
+          quantity,
+          totalCash,
+          creditReward,
+          paymentMethod,
+          checkoutChannel,
+          useCreditCoupon ? CHECKOUT_CREDIT_COUPON_COST : 0,
+          useCreditCoupon ? CHECKOUT_CREDIT_COUPON_PERCENT : 0
+        ]
       );
 
       if (useCreditCoupon) {
@@ -941,6 +1140,8 @@ app.post("/api/orders/cash", authRequired, async (req, res) => {
           couponApplied: Boolean(useCreditCoupon),
           couponCreditsUsed: useCreditCoupon ? CHECKOUT_CREDIT_COUPON_COST : 0,
           couponDiscountPercent: useCreditCoupon ? CHECKOUT_CREDIT_COUPON_PERCENT : 0,
+          paymentMethod,
+          checkoutChannel,
           campaignApplied: Boolean(campaign.active),
           creditReward,
           status: "PENDING"
@@ -997,8 +1198,11 @@ app.post("/api/orders/credits/purchase", authRequired, async (req, res) => {
       );
       await db.run(
         `
-        INSERT INTO orders (user_id, product_id, quantity, total_cash, total_credits, status, approved_at)
-        VALUES (?, ?, ?, 0, ?, 'APPROVED', datetime('now'))
+        INSERT INTO orders (
+          user_id, product_id, quantity, total_cash, total_credits, status, approved_at,
+          payment_method, checkout_channel, coupon_credits_used, coupon_discount_percent, status_updated_at
+        )
+        VALUES (?, ?, ?, 0, ?, 'DELIVERED', datetime('now'), 'CREDITOS', 'TROCA_CREDITOS', 0, 0, datetime('now'))
         `,
         [user.id, product.id, quantity, totalCredits]
       );
@@ -1096,7 +1300,7 @@ app.get("/api/tickets/:id/messages", authRequired, async (req, res) => {
       [ticketId]
     );
 
-    return res.json({ ok: true, messages });
+    return res.json({ ok: true, messages, ticketStatus: normalizeTicketStatus(access.ticket.status) });
   } catch (error) {
     return res.status(500).json({ error: "Falha ao buscar mensagens do ticket" });
   }
@@ -1115,6 +1319,10 @@ app.post("/api/tickets/:id/messages", authRequired, async (req, res) => {
     const access = await loadTicketForAccess(db, ticketId, req.auth);
     if (access.error) {
       return res.status(access.status).json({ error: access.error });
+    }
+
+    if (isTicketClosedStatus(access.ticket.status)) {
+      return res.status(409).json({ error: "Ticket finalizado no atendimento" });
     }
 
     const result = await db.run(
@@ -1541,7 +1749,8 @@ app.get("/api/admin/orders", authRequired, adminRequired, requireAdminPermission
     const rows = await db.all(
       `
       SELECT o.id, o.user_id, u.name AS user_name, o.product_id, p.title AS product_title,
-             o.quantity, o.total_cash, o.total_credits, o.status, o.credit_reward, o.created_at, o.approved_at
+             o.quantity, o.total_cash, o.total_credits, o.status, o.credit_reward, o.created_at, o.approved_at,
+             o.status_updated_at, o.payment_method, o.checkout_channel, o.coupon_credits_used, o.coupon_discount_percent
       FROM orders o
       JOIN users u ON u.id = o.user_id
       JOIN products p ON p.id = o.product_id
@@ -1549,9 +1758,45 @@ app.get("/api/admin/orders", authRequired, adminRequired, requireAdminPermission
       `
     );
 
-    return res.json({ ok: true, orders: rows });
+    return res.json({
+      ok: true,
+      orders: rows.map((row) => ({
+        ...row,
+        status: normalizeOrderStatus(row.status)
+      }))
+    });
   } catch (error) {
     return res.status(500).json({ error: "Falha ao listar pedidos" });
+  }
+});
+
+app.get("/api/admin/orders/kanban", authRequired, adminRequired, requireAdminPermission("ORDERS_MANAGE"), async (_req, res) => {
+  try {
+    const db = await getDb();
+    const rows = await db.all(
+      `
+      SELECT o.id, o.user_id, u.name AS user_name, o.product_id, p.title AS product_title, p.image_url,
+             o.quantity, o.total_cash, o.status, o.created_at, o.status_updated_at, o.payment_method
+      FROM orders o
+      JOIN users u ON u.id = o.user_id
+      JOIN products p ON p.id = o.product_id
+      ORDER BY o.id DESC
+      `
+    );
+
+    const normalizedOrders = rows.map((row) => ({
+      ...row,
+      status: normalizeOrderStatus(row.status)
+    }));
+
+    const columns = ORDER_STATUS_COLUMNS.map((status) => ({
+      status,
+      orders: normalizedOrders.filter((item) => item.status === status)
+    }));
+
+    return res.json({ ok: true, columns, orders: normalizedOrders });
+  } catch (error) {
+    return res.status(500).json({ error: "Falha ao carregar kanban de pedidos" });
   }
 });
 
@@ -1565,13 +1810,17 @@ app.post("/api/admin/orders/:id/approve", authRequired, adminRequired, requireAd
       return res.status(404).json({ error: "Pedido nao encontrado" });
     }
 
-    if (order.status === "APPROVED") {
-      return res.status(400).json({ error: "Pedido ja aprovado" });
+    const currentStatus = normalizeOrderStatus(order.status);
+    if (currentStatus !== "PENDING") {
+      return res.status(400).json({ error: `Pedido nao pode ser aprovado no status atual: ${currentStatus}` });
     }
 
     await db.exec("BEGIN TRANSACTION");
     try {
-      await db.run("UPDATE orders SET status = 'APPROVED', approved_at = datetime('now') WHERE id = ?", [orderId]);
+      await db.run(
+        "UPDATE orders SET status = 'PAID', approved_at = datetime('now'), status_updated_at = datetime('now') WHERE id = ?",
+        [orderId]
+      );
 
       if (order.credit_reward > 0) {
         await adjustCredits(db, {
@@ -1586,7 +1835,7 @@ app.post("/api/admin/orders/:id/approve", authRequired, adminRequired, requireAd
 
       await db.run(
         "INSERT INTO notifications (user_id, title, message) VALUES (?, ?, ?)",
-        [order.user_id, "Pedido aprovado", `Seu pedido #${orderId} foi aprovado.`]
+        [order.user_id, "Pedido aprovado", `Seu pedido #${orderId} foi aprovado e marcado como pago.`]
       );
 
       const user = await db.get("SELECT partner_active FROM users WHERE id = ?", [order.user_id]);
@@ -1621,6 +1870,79 @@ app.post("/api/admin/orders/:id/approve", authRequired, adminRequired, requireAd
     return res.json({ ok: true });
   } catch (error) {
     return res.status(500).json({ error: "Falha ao aprovar pedido" });
+  }
+});
+
+app.patch("/api/admin/orders/:id/status", authRequired, adminRequired, requireAdminPermission("ORDERS_MANAGE"), async (req, res) => {
+  try {
+    const db = await getDb();
+    const orderId = toInt(req.params.id);
+    const targetStatus = normalizeOrderStatus(req.body.status);
+
+    if (!isValidOrderStatus(targetStatus)) {
+      return res.status(400).json({ error: "Status de pedido invalido" });
+    }
+
+    const order = await db.get("SELECT * FROM orders WHERE id = ?", [orderId]);
+    if (!order) {
+      return res.status(404).json({ error: "Pedido nao encontrado" });
+    }
+
+    const currentStatus = normalizeOrderStatus(order.status);
+    if (currentStatus === targetStatus) {
+      return res.json({ ok: true, status: targetStatus });
+    }
+
+    const transitions = {
+      PENDING: ["PAID", "CANCELLED"],
+      PAID: ["PROCESSING", "SHIPPED", "DELIVERED", "CANCELLED"],
+      PROCESSING: ["SHIPPED", "DELIVERED", "CANCELLED"],
+      SHIPPED: ["DELIVERED", "CANCELLED"],
+      DELIVERED: [],
+      CANCELLED: []
+    };
+
+    if (!transitions[currentStatus]?.includes(targetStatus)) {
+      return res.status(400).json({ error: `Transicao invalida de ${currentStatus} para ${targetStatus}` });
+    }
+
+    if (currentStatus === "PENDING" && targetStatus === "PAID") {
+      return res.status(400).json({ error: "Use a acao Aprovar para mover de PENDING para PAID." });
+    }
+
+    await db.run("UPDATE orders SET status = ?, status_updated_at = datetime('now') WHERE id = ?", [targetStatus, orderId]);
+
+    if (targetStatus === "SHIPPED") {
+      await db.run(
+        "INSERT INTO notifications (user_id, title, message) VALUES (?, ?, ?)",
+        [order.user_id, "Pedido enviado", `Seu pedido #${orderId} foi enviado.`]
+      );
+    }
+
+    if (targetStatus === "DELIVERED") {
+      await db.run(
+        "INSERT INTO notifications (user_id, title, message) VALUES (?, ?, ?)",
+        [order.user_id, "Pedido entregue", `Seu pedido #${orderId} foi marcado como entregue.`]
+      );
+    }
+
+    if (targetStatus === "CANCELLED") {
+      await db.run(
+        "INSERT INTO notifications (user_id, title, message) VALUES (?, ?, ?)",
+        [order.user_id, "Pedido cancelado", `Seu pedido #${orderId} foi cancelado.`]
+      );
+    }
+
+    await logActivity(db, {
+      actorUserId: req.auth.sub,
+      targetUserId: order.user_id,
+      action: "ORDER_STATUS_UPDATE",
+      details: `Pedido #${orderId}: ${currentStatus} -> ${targetStatus}`
+    });
+
+    return res.json({ ok: true, status: targetStatus });
+  } catch (error) {
+    return res.status(500).json({ error: "Falha ao atualizar status do pedido" });
   }
 });
 
@@ -1773,7 +2095,7 @@ app.get("/api/admin/reviews", authRequired, adminRequired, requireAdminPermissio
       `
       SELECT r.id, r.user_id, u.name AS user_name, u.email AS user_email,
              r.product_id, p.title AS product_title, p.brand AS product_brand,
-             r.rating, r.comment, r.photo_url, r.created_at
+             r.rating, r.comment, r.photo_url, r.created_at, r.verified_purchase, r.order_id
       FROM reviews r
       JOIN users u ON u.id = r.user_id
       JOIN products p ON p.id = r.product_id
@@ -1897,7 +2219,7 @@ app.get("/api/admin/tickets/:id/messages", authRequired, adminRequired, requireA
       [ticketId]
     );
 
-    return res.json({ ok: true, messages });
+    return res.json({ ok: true, messages, ticketStatus: normalizeTicketStatus(access.ticket.status) });
   } catch (error) {
     return res.status(500).json({ error: "Falha ao listar mensagens" });
   }
@@ -1993,6 +2315,59 @@ app.post("/api/admin/tickets/:id/respond", authRequired, adminRequired, requireA
   }
 });
 
+app.patch("/api/admin/tickets/:id/status", authRequired, adminRequired, requireAdminPermission("TICKETS_MANAGE"), async (req, res) => {
+  try {
+    const db = await getDb();
+    const ticketId = toInt(req.params.id);
+    const nextStatus = normalizeTicketStatus(req.body.status);
+    const allowed = ["OPEN", "ANSWERED", "CLOSED"];
+
+    if (!allowed.includes(nextStatus)) {
+      return res.status(400).json({ error: "Status de ticket invalido" });
+    }
+
+    const ticket = await db.get("SELECT id, user_id, status FROM tickets WHERE id = ?", [ticketId]);
+    if (!ticket) {
+      return res.status(404).json({ error: "Ticket nao encontrado" });
+    }
+
+    const currentStatus = normalizeTicketStatus(ticket.status);
+    if (currentStatus === nextStatus) {
+      return res.json({ ok: true, status: nextStatus });
+    }
+
+    const updateSql = nextStatus === "OPEN"
+      ? "UPDATE tickets SET status = ?, responded_by = NULL, responded_at = NULL WHERE id = ?"
+      : "UPDATE tickets SET status = ?, responded_by = ?, responded_at = datetime('now') WHERE id = ?";
+    const updateParams = nextStatus === "OPEN"
+      ? [nextStatus, ticketId]
+      : [nextStatus, req.auth.sub, ticketId];
+
+    await db.run(updateSql, updateParams);
+
+    if (ticket.user_id) {
+      const message = nextStatus === "OPEN"
+        ? `Ticket #${ticketId} reaberto pela equipe.`
+        : `Ticket #${ticketId} finalizado pela equipe.`;
+      await db.run(
+        "INSERT INTO notifications (user_id, title, message) VALUES (?, ?, ?)",
+        [ticket.user_id, "Atualizacao do ticket", message]
+      );
+    }
+
+    await logActivity(db, {
+      actorUserId: req.auth.sub,
+      targetUserId: ticket.user_id,
+      action: "ADMIN_TICKET_STATUS_UPDATE",
+      details: `Ticket #${ticketId}: ${currentStatus} -> ${nextStatus}`
+    });
+
+    return res.json({ ok: true, status: nextStatus });
+  } catch (error) {
+    return res.status(500).json({ error: "Falha ao atualizar status do ticket" });
+  }
+});
+
 app.get("/api/admin/logs", authRequired, adminRequired, requireAdminPermission("LOGS_VIEW"), async (_req, res) => {
   try {
     const db = await getDb();
@@ -2044,7 +2419,7 @@ app.get("/api/admin/analytics", authRequired, adminRequired, requireAdminPermiss
       SELECT COALESCE(SUM(total_cash), 0) AS total_sales_cash,
              COUNT(*) AS total_orders_approved
       FROM orders
-      WHERE status = 'APPROVED'
+      WHERE status IN ('PAID','PROCESSING','SHIPPED','DELIVERED','APPROVED')
       `
     );
 
@@ -2057,6 +2432,242 @@ app.get("/api/admin/analytics", authRequired, adminRequired, requireAdminPermiss
     });
   } catch (error) {
     return res.status(500).json({ error: "Falha ao carregar analytics" });
+  }
+});
+
+app.get("/api/admin/reports/stock", authRequired, adminRequired, requireAdminPermission("ANALYTICS_VIEW"), async (req, res) => {
+  try {
+    const db = await getDb();
+    const threshold = Math.max(1, Math.min(100, toInt(req.query.threshold, LOW_STOCK_THRESHOLD_DEFAULT)));
+
+    const lowStock = await db.all(
+      `
+      SELECT id, title, brand, category, stock, is_active, price_cash
+      FROM products
+      WHERE is_active = 1 AND stock <= ?
+      ORDER BY stock ASC, id DESC
+      `,
+      [threshold]
+    );
+
+    const outOfStock = lowStock.filter((item) => Number(item.stock) <= 0);
+    const limitedStock = lowStock.filter((item) => Number(item.stock) > 0);
+
+    return res.json({
+      ok: true,
+      threshold,
+      out_of_stock: outOfStock,
+      low_stock: limitedStock,
+      total_alerts: lowStock.length
+    });
+  } catch (error) {
+    return res.status(500).json({ error: "Falha ao gerar relatorio de estoque" });
+  }
+});
+
+app.get("/api/admin/users/:id/overview", authRequired, adminRequired, requireAdminPermission("USERS_VIEW"), async (req, res) => {
+  try {
+    const db = await getDb();
+    const userId = toInt(req.params.id);
+    const user = await db.get(
+      `
+      SELECT id, name, email, phone, role, status_usuario, credits, created_at, is_banned, partner_active
+      FROM users
+      WHERE id = ?
+      `,
+      [userId]
+    );
+
+    if (!user) {
+      return res.status(404).json({ error: "Usuario nao encontrado" });
+    }
+
+    const [orders, transactions, tickets, reviewsCount] = await Promise.all([
+      db.all(
+        `
+        SELECT o.id, o.status, o.total_cash, o.total_credits, o.quantity, o.created_at,
+               p.title AS product_title
+        FROM orders o
+        JOIN products p ON p.id = o.product_id
+        WHERE o.user_id = ?
+        ORDER BY o.id DESC
+        LIMIT 20
+        `,
+        [userId]
+      ),
+      db.all(
+        `
+        SELECT id, delta, reason, created_at
+        FROM credit_transactions
+        WHERE user_id = ?
+        ORDER BY id DESC
+        LIMIT 20
+        `,
+        [userId]
+      ),
+      db.all(
+        `
+        SELECT id, subject, status, created_at, responded_at
+        FROM tickets
+        WHERE user_id = ?
+        ORDER BY id DESC
+        LIMIT 20
+        `,
+        [userId]
+      ),
+      db.get("SELECT COUNT(*) AS total FROM reviews WHERE user_id = ?", [userId])
+    ]);
+
+    return res.json({
+      ok: true,
+      user,
+      crm: {
+        orders: orders.map((item) => ({ ...item, status: normalizeOrderStatus(item.status) })),
+        transactions,
+        tickets,
+        reviews_total: Number(reviewsCount?.total || 0)
+      }
+    });
+  } catch (error) {
+    return res.status(500).json({ error: "Falha ao carregar CRM do usuario" });
+  }
+});
+
+app.get("/api/admin/campaigns", authRequired, adminRequired, requireAdminPermission("DISCOUNTS_MANAGE"), async (_req, res) => {
+  try {
+    const db = await getDb();
+    const campaigns = await db.all(
+      `
+      SELECT id, name, discount_percent, campaign_markup_percent, start_at, end_at, is_active, priority, created_at, updated_at
+      FROM campaigns
+      ORDER BY is_active DESC, priority DESC, id DESC
+      `
+    );
+
+    return res.json({ ok: true, campaigns });
+  } catch (error) {
+    return res.status(500).json({ error: "Falha ao listar campanhas" });
+  }
+});
+
+app.post("/api/admin/campaigns", authRequired, adminRequired, requireAdminPermission("DISCOUNTS_MANAGE"), async (req, res) => {
+  try {
+    const db = await getDb();
+    const name = String(req.body.name || "").trim();
+    const discountPercent = Math.max(0, Math.min(80, toInt(req.body.discount_percent ?? req.body.discountPercent)));
+    const markupPercent = Math.max(0, Math.min(80, toInt(req.body.campaign_markup_percent ?? req.body.campaignMarkupPercent)));
+    const startAt = parseRequiredDate(req.body.start_at ?? req.body.startAt, "start_at");
+    const endAt = parseRequiredDate(req.body.end_at ?? req.body.endAt, "end_at");
+    const priority = Math.max(-100, Math.min(100, toInt(req.body.priority, 0)));
+    const isActive = toBool(req.body.is_active ?? req.body.isActive) ? 1 : 0;
+
+    if (!name) {
+      return res.status(400).json({ error: "Nome da campanha e obrigatorio" });
+    }
+
+    if (new Date(endAt).getTime() <= new Date(startAt).getTime()) {
+      return res.status(400).json({ error: "Data final precisa ser maior que a inicial" });
+    }
+
+    const result = await db.run(
+      `
+      INSERT INTO campaigns (name, discount_percent, campaign_markup_percent, start_at, end_at, is_active, priority, created_by, updated_by, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+      `,
+      [name, discountPercent, markupPercent, startAt, endAt, isActive, priority, req.auth.sub, req.auth.sub]
+    );
+
+    await logActivity(db, {
+      actorUserId: req.auth.sub,
+      action: "ADMIN_CAMPAIGN_CREATE",
+      details: `Campanha #${result.lastID} - ${name}`
+    });
+
+    return res.json({ ok: true, campaignId: result.lastID });
+  } catch (error) {
+    return res.status(500).json({ error: error.message || "Falha ao criar campanha" });
+  }
+});
+
+app.put("/api/admin/campaigns/:id", authRequired, adminRequired, requireAdminPermission("DISCOUNTS_MANAGE"), async (req, res) => {
+  try {
+    const db = await getDb();
+    const campaignId = toInt(req.params.id);
+    const current = await db.get("SELECT id FROM campaigns WHERE id = ?", [campaignId]);
+    if (!current) {
+      return res.status(404).json({ error: "Campanha nao encontrada" });
+    }
+
+    const name = req.body.name == null ? null : String(req.body.name).trim();
+    const discountPercent = req.body.discount_percent == null && req.body.discountPercent == null
+      ? null
+      : Math.max(0, Math.min(80, toInt(req.body.discount_percent ?? req.body.discountPercent)));
+    const markupPercent = req.body.campaign_markup_percent == null && req.body.campaignMarkupPercent == null
+      ? null
+      : Math.max(0, Math.min(80, toInt(req.body.campaign_markup_percent ?? req.body.campaignMarkupPercent)));
+    const startAt = req.body.start_at == null && req.body.startAt == null
+      ? null
+      : parseRequiredDate(req.body.start_at ?? req.body.startAt, "start_at");
+    const endAt = req.body.end_at == null && req.body.endAt == null
+      ? null
+      : parseRequiredDate(req.body.end_at ?? req.body.endAt, "end_at");
+    const priority = req.body.priority == null ? null : Math.max(-100, Math.min(100, toInt(req.body.priority, 0)));
+    const isActive = req.body.is_active == null && req.body.isActive == null
+      ? null
+      : (toBool(req.body.is_active ?? req.body.isActive) ? 1 : 0);
+
+    await db.run(
+      `
+      UPDATE campaigns
+      SET name = COALESCE(?, name),
+          discount_percent = COALESCE(?, discount_percent),
+          campaign_markup_percent = COALESCE(?, campaign_markup_percent),
+          start_at = COALESCE(?, start_at),
+          end_at = COALESCE(?, end_at),
+          is_active = COALESCE(?, is_active),
+          priority = COALESCE(?, priority),
+          updated_by = ?,
+          updated_at = datetime('now')
+      WHERE id = ?
+      `,
+      [name || null, discountPercent, markupPercent, startAt, endAt, isActive, priority, req.auth.sub, campaignId]
+    );
+
+    await logActivity(db, {
+      actorUserId: req.auth.sub,
+      action: "ADMIN_CAMPAIGN_UPDATE",
+      details: `Campanha #${campaignId} atualizada`
+    });
+
+    return res.json({ ok: true });
+  } catch (error) {
+    return res.status(500).json({ error: error.message || "Falha ao atualizar campanha" });
+  }
+});
+
+app.delete("/api/admin/campaigns/:id", authRequired, adminRequired, requireAdminPermission("DISCOUNTS_MANAGE"), async (req, res) => {
+  try {
+    const db = await getDb();
+    const campaignId = toInt(req.params.id);
+    const exists = await db.get("SELECT id FROM campaigns WHERE id = ?", [campaignId]);
+    if (!exists) {
+      return res.status(404).json({ error: "Campanha nao encontrada" });
+    }
+
+    await db.run("UPDATE campaigns SET is_active = 0, updated_by = ?, updated_at = datetime('now') WHERE id = ?", [
+      req.auth.sub,
+      campaignId
+    ]);
+
+    await logActivity(db, {
+      actorUserId: req.auth.sub,
+      action: "ADMIN_CAMPAIGN_DISABLE",
+      details: `Campanha #${campaignId} desativada`
+    });
+
+    return res.json({ ok: true });
+  } catch (error) {
+    return res.status(500).json({ error: "Falha ao desativar campanha" });
   }
 });
 
@@ -2235,6 +2846,8 @@ async function start() {
   if (seeded) {
     console.log(`[seed] ${SEED_PRODUCTS.length} produtos inseridos (auto).`);
   }
+
+  await ensureDefaultCampaign(db);
 
   cron.schedule("0 2 1 * *", async () => {
     try {

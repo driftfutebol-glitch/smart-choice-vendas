@@ -34,10 +34,16 @@ let productsCache = [];
 let ordersCache = [];
 let ticketsCache = [];
 let reviewsCache = [];
+let campaignsCache = [];
+let stockReportCache = { threshold: 5, out_of_stock: [], low_stock: [] };
 let activeTicketChatId = null;
+let activeTicketChatStatus = "";
 let logsCache = [];
 let analyticsCache = { visitors: [], signups: [] };
 let autoRefreshInterval = null;
+let crmCache = null;
+
+const ORDER_KANBAN_COLUMNS = ["PENDING", "PAID", "PROCESSING", "SHIPPED", "DELIVERED", "CANCELLED"];
 
 function buildAutoPhoneTag(seed = "") {
   const safeSeed = String(seed).replace(/[^a-z0-9]/gi, "").toLowerCase().slice(-6) || "admin";
@@ -96,6 +102,40 @@ function formatDate(value) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return String(value);
   return date.toLocaleString("pt-BR");
+}
+
+function normalizeTicketStatus(status) {
+  return String(status || "").trim().toUpperCase();
+}
+
+function isFinalTicketStatus(status) {
+  return ["ANSWERED", "CLOSED", "RESOLVED"].includes(normalizeTicketStatus(status));
+}
+
+function toDateTimeLocalValue(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const tzOffsetMs = date.getTimezoneOffset() * 60 * 1000;
+  const local = new Date(date.getTime() - tzOffsetMs);
+  return local.toISOString().slice(0, 16);
+}
+
+function parseInteger(value, fallback = 0) {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function formatOrderStatusLabel(status) {
+  const map = {
+    PENDING: "Pendente",
+    PAID: "Pago",
+    PROCESSING: "Em separação",
+    SHIPPED: "Enviado",
+    DELIVERED: "Entregue",
+    CANCELLED: "Cancelado"
+  };
+  return map[String(status || "").toUpperCase()] || String(status || "-");
 }
 
 function hasPermission(permission) {
@@ -312,6 +352,320 @@ async function loadAnalytics() {
   renderTrend("signupsTrend", analyticsCache.signups);
 }
 
+function renderCampaigns() {
+  const target = document.getElementById("campaignsList");
+  if (!target) return;
+
+  if (!hasPermission("DISCOUNTS_MANAGE")) {
+    target.innerHTML = "<p>Sem permissão para visualizar campanhas.</p>";
+    return;
+  }
+
+  const rows = campaignsCache
+    .map((campaign) => {
+      const statusBadge = Number(campaign.is_active) === 1
+        ? `<span class="badge ok">ATIVA</span>`
+        : `<span class="badge warn">INATIVA</span>`;
+
+      const actions = [
+        `<button data-action="edit-campaign" data-id="${campaign.id}">Editar</button>`
+      ];
+
+      if (Number(campaign.is_active) === 1) {
+        actions.push(`<button class="danger" data-action="disable-campaign" data-id="${campaign.id}">Desativar</button>`);
+      }
+
+      return `
+        <tr>
+          <td>${campaign.id}</td>
+          <td>${escapeHtml(campaign.name || "-")}</td>
+          <td>${parseInteger(campaign.discount_percent, 0)}%</td>
+          <td>${parseInteger(campaign.campaign_markup_percent, 0)}%</td>
+          <td>${formatDate(campaign.start_at)}</td>
+          <td>${formatDate(campaign.end_at)}</td>
+          <td>${campaign.priority ?? 0}</td>
+          <td>${statusBadge}</td>
+          <td class="actions">${actions.join("")}</td>
+        </tr>
+      `;
+    })
+    .join("");
+
+  target.innerHTML = renderTable(
+    ["ID", "Nome", "Desconto", "Markup", "Início", "Fim", "Prioridade", "Status", "Ações"],
+    rows
+  );
+}
+
+function fillCampaignForm(campaign) {
+  const form = document.getElementById("campaignForm");
+  if (!form || !campaign) return;
+
+  form.querySelector("input[name='campaignId']").value = String(campaign.id || "");
+  form.querySelector("input[name='name']").value = campaign.name || "";
+  form.querySelector("input[name='discountPercent']").value = parseInteger(campaign.discount_percent, 0);
+  form.querySelector("input[name='markupPercent']").value = parseInteger(campaign.campaign_markup_percent, 0);
+  form.querySelector("input[name='startAt']").value = toDateTimeLocalValue(campaign.start_at);
+  form.querySelector("input[name='endAt']").value = toDateTimeLocalValue(campaign.end_at);
+  form.querySelector("input[name='priority']").value = parseInteger(campaign.priority, 0);
+  form.querySelector("input[name='isActive']").checked = Number(campaign.is_active) === 1;
+}
+
+function resetCampaignForm() {
+  const form = document.getElementById("campaignForm");
+  if (!form) return;
+  form.reset();
+  form.querySelector("input[name='campaignId']").value = "";
+}
+
+function campaignPayloadFromForm(formData) {
+  return {
+    name: String(formData.get("name") || "").trim(),
+    discountPercent: parseInteger(formData.get("discountPercent"), 0),
+    campaignMarkupPercent: parseInteger(formData.get("markupPercent"), 0),
+    startAt: String(formData.get("startAt") || "").trim(),
+    endAt: String(formData.get("endAt") || "").trim(),
+    priority: parseInteger(formData.get("priority"), 0),
+    isActive: formData.get("isActive") === "on"
+  };
+}
+
+async function loadCampaigns() {
+  const targetId = "campaignsList";
+  if (!hasPermission("DISCOUNTS_MANAGE")) {
+    showSectionMessage(targetId, "Sem permissão para visualizar campanhas.");
+    return;
+  }
+
+  try {
+    const result = await apiRequest("/admin/campaigns");
+    campaignsCache = result.campaigns || [];
+    renderCampaigns();
+  } catch (error) {
+    campaignsCache = [];
+    renderCampaigns();
+    if (isRouteNotFoundError(error)) {
+      showSectionMessage(targetId, "Backend sem módulo de campanhas. Faça deploy do backend mais recente.");
+      return;
+    }
+    showSectionMessage(targetId, `Falha ao carregar campanhas: ${error.message}`);
+  }
+}
+
+async function handleCampaignSave(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const formData = new FormData(form);
+  const payload = campaignPayloadFromForm(formData);
+  const campaignId = parseInteger(formData.get("campaignId"), 0);
+
+  if (!payload.name) {
+    setFeedback("campaignFeedback", "Informe o nome da campanha.", "error");
+    return;
+  }
+
+  if (!payload.startAt || !payload.endAt) {
+    setFeedback("campaignFeedback", "Informe as datas de início e fim.", "error");
+    return;
+  }
+
+  try {
+    if (campaignId) {
+      await apiRequest(`/admin/campaigns/${campaignId}`, {
+        method: "PUT",
+        body: JSON.stringify(payload)
+      });
+      setFeedback("campaignFeedback", `Campanha #${campaignId} atualizada com sucesso.`, "success");
+    } else {
+      await apiRequest("/admin/campaigns", {
+        method: "POST",
+        body: JSON.stringify(payload)
+      });
+      setFeedback("campaignFeedback", "Campanha criada com sucesso.", "success");
+    }
+
+    resetCampaignForm();
+    await loadCampaigns();
+  } catch (error) {
+    setFeedback("campaignFeedback", error.message, "error");
+  }
+}
+
+function renderStockReport() {
+  const target = document.getElementById("stockReportList");
+  if (!target) return;
+
+  if (!hasPermission("ANALYTICS_VIEW")) {
+    target.innerHTML = "<p>Sem permissão para visualizar estoque crítico.</p>";
+    return;
+  }
+
+  const outOfStock = stockReportCache.out_of_stock || [];
+  const lowStock = stockReportCache.low_stock || [];
+  const merged = [...outOfStock, ...lowStock];
+
+  const rows = merged
+    .map((item) => {
+      const status = Number(item.stock) <= 0
+        ? `<span class="badge warn">Sem estoque</span>`
+        : `<span class="badge">Baixo</span>`;
+
+      return `
+        <tr>
+          <td>${item.id}</td>
+          <td>${escapeHtml(item.title || "-")}</td>
+          <td>${escapeHtml(item.brand || "-")}</td>
+          <td>${escapeHtml(item.category || "-")}</td>
+          <td>${item.stock}</td>
+          <td>${formatCurrency(item.price_cash || 0)}</td>
+          <td>${status}</td>
+        </tr>
+      `;
+    })
+    .join("");
+
+  target.innerHTML = renderTable(
+    ["ID", "Produto", "Marca", "Categoria", "Estoque", "Preço", "Alerta"],
+    rows
+  );
+}
+
+async function loadStockReport() {
+  const targetId = "stockReportList";
+  if (!hasPermission("ANALYTICS_VIEW")) {
+    showSectionMessage(targetId, "Sem permissão para visualizar estoque crítico.");
+    return;
+  }
+
+  const thresholdInput = document.getElementById("stockThresholdInput");
+  const threshold = Math.max(1, Math.min(100, parseInteger(thresholdInput?.value, 5)));
+  if (thresholdInput) {
+    thresholdInput.value = String(threshold);
+  }
+
+  try {
+    const result = await apiRequest(`/admin/reports/stock?threshold=${threshold}`);
+    stockReportCache = {
+      threshold: parseInteger(result.threshold, threshold),
+      out_of_stock: result.out_of_stock || [],
+      low_stock: result.low_stock || []
+    };
+    renderStockReport();
+  } catch (error) {
+    stockReportCache = { threshold, out_of_stock: [], low_stock: [] };
+    renderStockReport();
+    if (isRouteNotFoundError(error)) {
+      showSectionMessage(targetId, "Backend sem rota de relatório de estoque. Faça deploy do backend atualizado.");
+      return;
+    }
+    showSectionMessage(targetId, `Falha ao carregar estoque crítico: ${error.message}`);
+  }
+}
+
+function renderCrmOverview() {
+  const target = document.getElementById("crmOverview");
+  if (!target) return;
+
+  if (!hasPermission("USERS_VIEW")) {
+    target.innerHTML = "<p>Sem permissão para visualizar CRM.</p>";
+    return;
+  }
+
+  if (!crmCache || !crmCache.user) {
+    target.innerHTML = "<p>Digite o ID do usuário para carregar o CRM.</p>";
+    return;
+  }
+
+  const { user, crm } = crmCache;
+  const ordersRows = (crm.orders || [])
+    .slice(0, 10)
+    .map((order) => `
+      <tr>
+        <td>${order.id}</td>
+        <td>${escapeHtml(order.product_title || "-")}</td>
+        <td>${formatCurrency(order.total_cash || 0)}</td>
+        <td>${formatOrderStatusLabel(order.status)}</td>
+        <td>${formatDate(order.created_at)}</td>
+      </tr>
+    `)
+    .join("");
+
+  const transactionsRows = (crm.transactions || [])
+    .slice(0, 10)
+    .map((tx) => `
+      <tr>
+        <td>${tx.id}</td>
+        <td>${tx.delta}</td>
+        <td>${escapeHtml(tx.reason || "-")}</td>
+        <td>${formatDate(tx.created_at)}</td>
+      </tr>
+    `)
+    .join("");
+
+  const ticketsRows = (crm.tickets || [])
+    .slice(0, 10)
+    .map((ticket) => `
+      <tr>
+        <td>${ticket.id}</td>
+        <td>${escapeHtml(ticket.subject || "-")}</td>
+        <td>${escapeHtml(ticket.status || "-")}</td>
+        <td>${formatDate(ticket.created_at)}</td>
+      </tr>
+    `)
+    .join("");
+
+  const userSummary = `
+    <article class="panel">
+      <h3>Cliente #${user.id} • ${escapeHtml(user.name || "-")}</h3>
+      <p>${escapeHtml(user.email || "-")} • ${escapeHtml(user.phone || "-")}</p>
+      <p>Créditos: <strong>${user.credits || 0}</strong> • Status: <strong>${escapeHtml(user.status_usuario || "-")}</strong></p>
+      <p>Role: ${escapeHtml(user.role || "USER")} • Parceiro: ${Number(user.partner_active) === 1 ? "Sim" : "Não"} • Banido: ${Number(user.is_banned) === 1 ? "Sim" : "Não"}</p>
+      <p>Cadastrado em: ${formatDate(user.created_at)} • Avaliações: ${crm.reviews_total || 0}</p>
+    </article>
+  `;
+
+  target.innerHTML = `
+    <div class="stack">
+      ${userSummary}
+      <div class="table-wrap">${renderTable(["Pedido", "Produto", "Valor", "Status", "Data"], ordersRows)}</div>
+      <div class="table-wrap">${renderTable(["Transação", "Delta", "Motivo", "Data"], transactionsRows)}</div>
+      <div class="table-wrap">${renderTable(["Ticket", "Assunto", "Status", "Data"], ticketsRows)}</div>
+    </div>
+  `;
+}
+
+async function loadCrmOverview(userId = null) {
+  const targetId = "crmOverview";
+  if (!hasPermission("USERS_VIEW")) {
+    showSectionMessage(targetId, "Sem permissão para visualizar CRM.");
+    return;
+  }
+
+  const input = document.getElementById("crmUserIdInput");
+  const parsedUserId = Number(userId || input?.value || 0);
+  if (!parsedUserId) {
+    crmCache = null;
+    renderCrmOverview();
+    setFeedback("crmFeedback", "Informe o ID do usuário para carregar o CRM.", "error");
+    return;
+  }
+
+  try {
+    const result = await apiRequest(`/admin/users/${parsedUserId}/overview`);
+    crmCache = { user: result.user, crm: result.crm || {} };
+    setFeedback("crmFeedback", `CRM do usuário #${parsedUserId} carregado.`, "success");
+    renderCrmOverview();
+  } catch (error) {
+    crmCache = null;
+    renderCrmOverview();
+    if (isRouteNotFoundError(error)) {
+      setFeedback("crmFeedback", "Backend sem módulo CRM. Faça deploy do backend atualizado.", "error");
+      return;
+    }
+    setFeedback("crmFeedback", error.message, "error");
+  }
+}
+
 function formatPermissions(permissions) {
   if (!permissions || permissions.length === 0) return "-";
   return permissions.join(", ");
@@ -359,6 +713,9 @@ function renderUsers() {
       }
       if (hasPermission("USERS_DELETE") && Number(user.is_owner) !== 1) {
         actions.push(`<button class="danger" data-action="remove-user" data-id="${user.id}">Remover</button>`);
+      }
+      if (hasPermission("USERS_VIEW")) {
+        actions.push(`<button data-action="open-user-crm" data-id="${user.id}">CRM</button>`);
       }
 
       return `
@@ -596,9 +953,26 @@ function renderOrders() {
 
   const rows = ordersCache
     .map((order) => {
-      const approveButton = order.status === "APPROVED"
-        ? "<span>Aprovado</span>"
-        : `<button data-action="approve-order" data-id="${order.id}">Aprovar</button>`;
+      const status = String(order.status || "").toUpperCase();
+      const actions = [];
+      if (status === "PENDING") {
+        actions.push(`<button data-action="approve-order" data-id="${order.id}">Aprovar</button>`);
+      }
+      if (status === "PAID") {
+        actions.push(`<button data-action="set-order-status" data-id="${order.id}" data-status="PROCESSING">Separação</button>`);
+        actions.push(`<button data-action="set-order-status" data-id="${order.id}" data-status="SHIPPED">Enviar</button>`);
+      }
+      if (status === "PROCESSING") {
+        actions.push(`<button data-action="set-order-status" data-id="${order.id}" data-status="SHIPPED">Marcar enviado</button>`);
+      }
+      if (status === "SHIPPED") {
+        actions.push(`<button data-action="set-order-status" data-id="${order.id}" data-status="DELIVERED">Marcar entregue</button>`);
+      }
+      if (["PAID", "PROCESSING", "SHIPPED"].includes(status)) {
+        actions.push(`<button class="danger" data-action="set-order-status" data-id="${order.id}" data-status="CANCELLED">Cancelar</button>`);
+      }
+
+      const actionHtml = actions.length ? actions.join("") : "<span>-</span>";
 
       return `
         <tr>
@@ -607,30 +981,114 @@ function renderOrders() {
           <td>${order.product_title}</td>
           <td>${order.quantity}</td>
           <td>${formatCurrency(order.total_cash)}</td>
+          <td>${order.payment_method || "-"}</td>
+          <td>${order.checkout_channel || "-"}</td>
+          <td>${order.coupon_discount_percent ? `${order.coupon_discount_percent}%` : "-"}</td>
           <td>${order.credit_reward}</td>
-          <td>${order.status}</td>
+          <td>${formatOrderStatusLabel(order.status)}</td>
           <td>${formatDate(order.created_at)}</td>
-          <td class="actions">${approveButton}</td>
+          <td class="actions">${actionHtml}</td>
         </tr>
       `;
     })
     .join("");
 
   target.innerHTML = renderTable(
-    ["Pedido", "Cliente", "Produto", "Qtd", "Valor", "Prêmio crédito", "Status", "Criado em", "Ação"],
+    ["Pedido", "Cliente", "Produto", "Qtd", "Valor", "Pagamento", "Canal", "Cupom", "Prêmio crédito", "Status", "Criado em", "Ação"],
     rows
   );
+}
+
+function renderOrdersKanban() {
+  const target = document.getElementById("ordersKanban");
+  if (!target) return;
+
+  if (!hasPermission("ORDERS_MANAGE")) {
+    target.innerHTML = "<p>Sem permissão para visualizar kanban.</p>";
+    return;
+  }
+
+  const columnsHtml = ORDER_KANBAN_COLUMNS.map((status) => {
+    const orders = ordersCache.filter((item) => String(item.status).toUpperCase() === status);
+    const cards = orders.length
+      ? orders
+          .slice(0, 40)
+          .map((order) => {
+            const quickActions = [];
+            if (status === "PENDING") {
+              quickActions.push(`<button data-action="approve-order" data-id="${order.id}">Aprovar</button>`);
+            }
+            if (status === "PAID") {
+              quickActions.push(`<button data-action="set-order-status" data-id="${order.id}" data-status="PROCESSING">Separação</button>`);
+              quickActions.push(`<button data-action="set-order-status" data-id="${order.id}" data-status="SHIPPED">Enviar</button>`);
+            }
+            if (status === "PROCESSING") {
+              quickActions.push(`<button data-action="set-order-status" data-id="${order.id}" data-status="SHIPPED">Enviar</button>`);
+            }
+            if (status === "SHIPPED") {
+              quickActions.push(`<button data-action="set-order-status" data-id="${order.id}" data-status="DELIVERED">Entregue</button>`);
+            }
+            if (["PAID", "PROCESSING", "SHIPPED"].includes(status)) {
+              quickActions.push(`<button class="danger" data-action="set-order-status" data-id="${order.id}" data-status="CANCELLED">Cancelar</button>`);
+            }
+
+            return `
+              <article class="kanban-card">
+                <div class="kanban-card-top">
+                  <strong>#${order.id}</strong>
+                  <span class="badge">${formatOrderStatusLabel(order.status)}</span>
+                </div>
+                <p>${escapeHtml(order.user_name || "-")} • ${escapeHtml(order.product_title || "-")}</p>
+                <p>${formatCurrency(order.total_cash)} • ${escapeHtml(order.payment_method || "-")}</p>
+                <div class="actions">${quickActions.join("") || "<span>-</span>"}</div>
+              </article>
+            `;
+          })
+          .join("")
+      : "<p class=\"muted\">Sem pedidos.</p>";
+
+    return `
+      <section class="kanban-col">
+        <div class="kanban-col-head">
+          <h4>${formatOrderStatusLabel(status)}</h4>
+          <span class="kanban-count">${orders.length}</span>
+        </div>
+        <div class="kanban-list">${cards}</div>
+      </section>
+    `;
+  }).join("");
+
+  target.innerHTML = columnsHtml;
 }
 
 async function loadOrders() {
   if (!hasPermission("ORDERS_MANAGE")) {
     showSectionMessage("ordersList", "Sem permissão para visualizar pedidos.");
+    showSectionMessage("ordersKanban", "Sem permissão para visualizar kanban.");
     return;
   }
 
-  const result = await apiRequest("/admin/orders");
-  ordersCache = result.orders || [];
-  renderOrders();
+  try {
+    const result = await apiRequest("/admin/orders/kanban").catch(async () => apiRequest("/admin/orders"));
+    ordersCache = (result.orders || []).map((item) => ({
+      ...item,
+      status: String(item.status || "").toUpperCase()
+    }));
+    renderOrdersKanban();
+    renderOrders();
+  } catch (error) {
+    ordersCache = [];
+    renderOrdersKanban();
+    renderOrders();
+
+    if (isRouteNotFoundError(error)) {
+      showSectionMessage("ordersList", "Backend sem rota de pedidos do admin. Faça deploy do backend atualizado.");
+      showSectionMessage("ordersKanban", "Kanban indisponível até atualizar o backend.");
+      return;
+    }
+
+    showSectionMessage("ordersList", `Falha ao carregar pedidos: ${error.message}`);
+  }
 }
 
 function resetReviewForm() {
@@ -679,6 +1137,7 @@ function renderReviewsAdmin() {
           <td>${escapeHtml(review.user_name || "-")}</td>
           <td>${escapeHtml(review.product_title || "-")}</td>
           <td><span class="rating-pill">${"★".repeat(Number(review.rating || 0))}</span></td>
+          <td>${Number(review.verified_purchase) === 1 ? `<span class="badge ok">Verificada</span>` : `<span class="badge">Livre</span>`}</td>
           <td class="review-comment-cell">${escapeHtml(review.comment || "-")}</td>
           <td>${photoLink}</td>
           <td>${formatDate(review.created_at)}</td>
@@ -692,7 +1151,7 @@ function renderReviewsAdmin() {
     .join("");
 
   target.innerHTML = renderTable(
-    ["ID", "Cliente", "Produto", "Nota", "Comentário", "Foto", "Data", "Ações"],
+    ["ID", "Cliente", "Produto", "Nota", "Compra", "Comentário", "Foto", "Data", "Ações"],
     rows
   );
 }
@@ -759,9 +1218,13 @@ function renderTickets() {
 
   const onlyOpen = Boolean(document.getElementById("onlyOpenTicketsToggle")?.checked);
   const rows = ticketsCache
-    .filter((ticket) => (onlyOpen ? ticket.status !== "ANSWERED" : true))
+    .filter((ticket) => {
+      const status = normalizeTicketStatus(ticket.status);
+      return onlyOpen ? !isFinalTicketStatus(status) : true;
+    })
     .map((ticket) => {
-      const responseField = ticket.status === "ANSWERED"
+      const status = normalizeTicketStatus(ticket.status);
+      const responseField = isFinalTicketStatus(status)
         ? `<p><strong>Resposta:</strong> ${ticket.admin_response || "-"}</p>`
         : `
           <div class="ticket-response-box">
@@ -769,6 +1232,9 @@ function renderTickets() {
             <button data-action="respond-ticket" data-id="${ticket.id}">Responder ticket</button>
           </div>
         `;
+      const lifecycleAction = status === "CLOSED"
+        ? `<button data-action="reopen-ticket" data-id="${ticket.id}">Reabrir</button>`
+        : `<button class="danger" data-action="close-ticket" data-id="${ticket.id}">Encerrar</button>`;
 
       return `
         <tr>
@@ -780,6 +1246,7 @@ function renderTickets() {
           <td>${ticket.status}</td>
           <td>
             <button data-action="open-ticket-chat" data-id="${ticket.id}">Ver chat</button>
+            ${lifecycleAction}
             ${responseField}
           </td>
         </tr>
@@ -801,6 +1268,7 @@ function renderTicketChat(messages = []) {
   if (!activeTicketChatId) {
     box.innerHTML = "";
     hint.textContent = "Selecione um ticket para ver o chat.";
+    activeTicketChatStatus = "";
     return;
   }
 
@@ -819,7 +1287,8 @@ function renderTicketChat(messages = []) {
       .join("");
   }
 
-  hint.textContent = `Chat do ticket #${activeTicketChatId}`;
+  const statusLabel = activeTicketChatStatus ? ` (${activeTicketChatStatus})` : "";
+  hint.textContent = `Chat do ticket #${activeTicketChatId}${statusLabel}`;
 }
 
 async function loadTicketChat(ticketId) {
@@ -827,6 +1296,7 @@ async function loadTicketChat(ticketId) {
   activeTicketChatId = ticketId;
   try {
     const result = await apiRequest(`/admin/tickets/${ticketId}/messages`);
+    activeTicketChatStatus = normalizeTicketStatus(result.ticketStatus);
     renderTicketChat(result.messages || []);
     setFeedback("ticketChatFeedback", "", "");
   } catch (error) {
@@ -844,6 +1314,11 @@ async function sendTicketChat(event) {
   const input = document.querySelector("#ticketChatForm input[name='message']");
   const message = String(input?.value || "").trim();
   if (!message) return;
+
+  if (normalizeTicketStatus(activeTicketChatStatus) === "CLOSED") {
+    setFeedback("ticketChatFeedback", "Ticket fechado. Reabra o ticket para enviar nova mensagem.", "error");
+    return;
+  }
 
   try {
     await apiRequest(`/admin/tickets/${activeTicketChatId}/messages`, {
@@ -914,7 +1389,33 @@ async function loadLogs() {
 }
 
 async function refreshAll() {
-  await Promise.all([loadAnalytics(), loadUsers(), loadProducts(), loadReviewsAdmin(), loadOrders(), loadTickets(), loadLogs()]);
+  const tasks = [
+    loadAnalytics(),
+    loadUsers(),
+    loadProducts(),
+    loadReviewsAdmin(),
+    loadOrders(),
+    loadTickets(),
+    loadLogs()
+  ];
+
+  if (hasPermission("DISCOUNTS_MANAGE")) {
+    tasks.push(loadCampaigns());
+  }
+
+  if (hasPermission("ANALYTICS_VIEW")) {
+    tasks.push(loadStockReport());
+  }
+
+  const crmUserId = parseInteger(document.getElementById("crmUserIdInput")?.value, 0);
+  if (crmUserId > 0 && hasPermission("USERS_VIEW")) {
+    tasks.push(loadCrmOverview(crmUserId));
+  } else {
+    crmCache = null;
+    renderCrmOverview();
+  }
+
+  await Promise.allSettled(tasks);
 }
 
 function loadPermissionsFromUser(userId) {
@@ -1223,6 +1724,7 @@ function bindActions() {
   document.getElementById("passwordResetForm")?.addEventListener("submit", handlePasswordReset);
   document.getElementById("notificationForm")?.addEventListener("submit", handleNotification);
   document.getElementById("discountForm")?.addEventListener("submit", handleDiscount);
+  document.getElementById("campaignForm")?.addEventListener("submit", handleCampaignSave);
   document.getElementById("productCreateForm")?.addEventListener("submit", handleProductSave);
   document.getElementById("reviewEditForm")?.addEventListener("submit", handleReviewEdit);
   document.getElementById("ticketChatForm")?.addEventListener("submit", sendTicketChat);
@@ -1232,6 +1734,21 @@ function bindActions() {
     setFeedback("productFeedback", "Formulário limpo para novo produto.", "success");
   });
   document.getElementById("clearDiscountBtn")?.addEventListener("click", clearDiscount);
+  document.getElementById("campaignFormResetBtn")?.addEventListener("click", () => {
+    resetCampaignForm();
+    setFeedback("campaignFeedback", "Formulário de campanha limpo.", "success");
+  });
+  document.getElementById("refreshStockReportBtn")?.addEventListener("click", async () => {
+    await loadStockReport();
+  });
+  document.getElementById("loadCrmBtn")?.addEventListener("click", async () => {
+    await loadCrmOverview();
+  });
+  document.getElementById("crmUserIdInput")?.addEventListener("keydown", async (event) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    await loadCrmOverview();
+  });
   document.getElementById("cancelProductEditBtn")?.addEventListener("click", resetProductForm);
   document.getElementById("cancelReviewEditBtn")?.addEventListener("click", resetReviewForm);
 
@@ -1266,6 +1783,17 @@ function bindActions() {
         await apiRequest(`/admin/orders/${id}/approve`, { method: "POST" });
       }
 
+      if (action === "set-order-status") {
+        const nextStatus = String(button.getAttribute("data-status") || "").trim().toUpperCase();
+        if (!nextStatus) {
+          throw new Error("Status de pedido inválido.");
+        }
+        await apiRequest(`/admin/orders/${id}/status`, {
+          method: "PATCH",
+          body: JSON.stringify({ status: nextStatus })
+        });
+      }
+
       if (action === "respond-ticket") {
         const textarea = document.querySelector(`textarea[data-ticket-response='${id}']`);
         const response = String(textarea?.value || "").trim();
@@ -1277,12 +1805,37 @@ function bindActions() {
           method: "POST",
           body: JSON.stringify({ response })
         });
+        await loadTickets();
         await loadTicketChat(id);
       }
 
       if (action === "open-ticket-chat") {
         await loadTicketChat(id);
         document.getElementById("ticketChatForm")?.scrollIntoView({ behavior: "smooth" });
+        return;
+      }
+
+      if (action === "close-ticket") {
+        await apiRequest(`/admin/tickets/${id}/status`, {
+          method: "PATCH",
+          body: JSON.stringify({ status: "CLOSED" })
+        });
+        await loadTickets();
+        if (activeTicketChatId === id) {
+          await loadTicketChat(id);
+        }
+        return;
+      }
+
+      if (action === "reopen-ticket") {
+        await apiRequest(`/admin/tickets/${id}/status`, {
+          method: "PATCH",
+          body: JSON.stringify({ status: "OPEN" })
+        });
+        await loadTickets();
+        if (activeTicketChatId === id) {
+          await loadTicketChat(id);
+        }
         return;
       }
 
@@ -1310,6 +1863,16 @@ function bindActions() {
       if (action === "load-user-permissions") {
         loadPermissionsFromUser(id);
         openTab("tab-users");
+        return;
+      }
+
+      if (action === "open-user-crm") {
+        const crmInput = document.getElementById("crmUserIdInput");
+        if (crmInput) {
+          crmInput.value = String(id);
+        }
+        openTab("tab-users");
+        await loadCrmOverview(id);
         return;
       }
 
@@ -1371,6 +1934,23 @@ function bindActions() {
         const confirmed = window.confirm("Excluir esta avaliação?");
         if (!confirmed) return;
         await apiRequest(`/admin/reviews/${id}`, { method: "DELETE" });
+      }
+
+      if (action === "edit-campaign") {
+        const campaign = campaignsCache.find((item) => Number(item.id) === id);
+        if (campaign) {
+          fillCampaignForm(campaign);
+          openTab("tab-dashboard");
+          setFeedback("campaignFeedback", `Editando campanha #${id}.`, "success");
+        }
+        return;
+      }
+
+      if (action === "disable-campaign") {
+        const confirmed = window.confirm("Desativar esta campanha?");
+        if (!confirmed) return;
+        await apiRequest(`/admin/campaigns/${id}`, { method: "DELETE" });
+        setFeedback("campaignFeedback", `Campanha #${id} desativada.`, "success");
       }
 
       await refreshAll();

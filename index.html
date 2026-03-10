@@ -20,8 +20,10 @@
     <a class="brand" href="#top"><img class="brand-logo" src="assets/logos/scv-logo-primary.svg" alt="Smart Choice Vendas" /></a>
     <nav class="menu">
       <a href="#home">Início</a>
+      <a class="hidden" data-campaign-link href="promocao-dia-da-mulher.html">Promo 48h</a>
       <a href="#auth">Acesso</a>
       <a href="#loja">Loja</a>
+      <a href="#avaliacoes">Avaliações</a>
       <a href="#creditos">Créditos</a>
       <a href="troca-creditos.html">Troca</a>
       <a href="#suporte">Suporte</a>
@@ -47,6 +49,20 @@
         <img src="https://images.unsplash.com/photo-1580910051074-3eb694886505?auto=format&fit=crop&w=900&q=80" alt="Linha de celulares modernos" />
         <img src="https://images.unsplash.com/photo-1565849904461-04a58ad377e0?auto=format&fit=crop&w=900&q=80" alt="Celular com câmera avançada" />
       </div>
+    </section>
+
+    <section id="campaignSpotlight" class="campaign-spotlight reveal hidden">
+      <div class="campaign-content">
+        <p class="campaign-kicker">Campanha relâmpago</p>
+        <h2 id="campaignTitle">Especial Dia da Mulher</h2>
+        <p id="campaignMessage">Por 48 horas, tabela especial com preço-base atualizado e 10% OFF para celebrar mulheres e mães que inspiram.</p>
+        <div class="campaign-meta">
+          <span id="campaignDiscountTag" class="campaign-tag">10% OFF</span>
+          <span id="campaignPeriodTag" class="campaign-tag"></span>
+          <span id="campaignCountdown" class="campaign-tag"></span>
+        </div>
+      </div>
+      <a class="btn btn-primary" href="promocao-dia-da-mulher.html">Abrir página da campanha</a>
     </section>
 
     <section class="tech-strip reveal">
@@ -141,6 +157,53 @@
       <div id="productsGrid" class="products-grid"></div>
     </section>
 
+    <section id="avaliacoes" class="card reveal">
+      <div class="card-head">
+        <h2>Avaliações de Clientes</h2>
+        <p>Prova social real da Smart Choice Vendas. Veja opiniões e adicione sua avaliação.</p>
+      </div>
+
+      <div class="reviews-toolbar">
+        <label>Filtrar por produto
+          <select id="reviewsProductFilter">
+            <option value="">Todas as avaliações</option>
+          </select>
+        </label>
+        <article class="reviews-summary">
+          <strong id="reviewsAverage">0,0</strong>
+          <p id="reviewsCount">0 avaliações</p>
+        </article>
+      </div>
+
+      <div id="reviewsList" class="reviews-list"></div>
+
+      <form id="reviewForm" class="stack hidden" data-auth-only>
+        <h3>Adicionar avaliação</h3>
+        <label>Produto
+          <select id="reviewProductId" name="productId" required></select>
+        </label>
+        <label>Nota
+          <select name="rating" required>
+            <option value="5">5 estrelas</option>
+            <option value="4">4 estrelas</option>
+            <option value="3">3 estrelas</option>
+            <option value="2">2 estrelas</option>
+            <option value="1">1 estrela</option>
+          </select>
+        </label>
+        <label>Comentário
+          <textarea name="comment" rows="3" placeholder="Conte como foi sua experiência." required></textarea>
+        </label>
+        <label>URL da foto (opcional)
+          <input type="text" name="photoUrl" placeholder="https://..." />
+        </label>
+        <button class="btn btn-primary" type="submit">Publicar avaliação</button>
+        <small id="reviewFeedback"></small>
+      </form>
+
+      <p class="auth-tip" data-guest-only>Faça login para publicar sua avaliação.</p>
+    </section>
+
     <section id="suporte" class="card reveal">
       <div class="card-head">
         <h2>Suporte Inteligente</h2>
@@ -222,6 +285,35 @@
         <article><img src="assets/logos/scv-logo-shield.svg" alt="Logo escudo Smart Choice Vendas" /></article>
       </div>
     </section>
+
+    <section class="card reveal">
+      <div class="card-head">
+        <h2>Selos de Confiança</h2>
+        <p>Mais segurança para quem compra com a Smart Choice Vendas.</p>
+      </div>
+      <div class="trust-seals">
+        <article>
+          <span class="seal-icon">SSL</span>
+          <h3>Site Protegido</h3>
+          <p>Navegação com conexão segura e criptografada.</p>
+        </article>
+        <article>
+          <span class="seal-icon">CHECK</span>
+          <h3>Loja Verificada</h3>
+          <p>Operação ativa com políticas claras de garantia e suporte.</p>
+        </article>
+        <article>
+          <span class="seal-icon">SUP</span>
+          <h3>Suporte Real</h3>
+          <p>Atendimento híbrido com IA e equipe humana.</p>
+        </article>
+        <article>
+          <span class="seal-icon">ADM</span>
+          <h3>Gestão Transparente</h3>
+          <p>Painel administrativo com logs e controle de ações.</p>
+        </article>
+      </div>
+    </section>
   </main>
 
   <footer class="footer">
@@ -294,46 +386,61 @@
     <div class="modal-card auth-modal-card">
       <div class="modal-head">
         <h3>Central de Atendimento</h3>
-        <button id="closeSupportModal" class="btn btn-ghost" type="button">Fechar</button>
+        <div class="support-head-actions">
+          <button id="newSupportTicketBtn" class="btn btn-ghost" type="button">Novo atendimento</button>
+          <button id="closeSupportModal" class="btn btn-ghost" type="button">Fechar</button>
+        </div>
       </div>
 
-      <form id="supportPopupForm" class="stack">
-        <label>Nome
-          <input type="text" name="name" required />
-        </label>
-        <label>Número do pedido (se já tiver)
-          <input type="text" name="orderNumber" />
-        </label>
-        <label>Assunto
-          <select name="subject" required>
-            <option value="Dúvida de compra">Dúvida de compra</option>
-            <option value="Acompanhar pedido">Acompanhar pedido</option>
-            <option value="Pagamento">Pagamento</option>
-            <option value="Garantia/Reembolso">Garantia/Reembolso</option>
-          </select>
-        </label>
-        <label>Mensagem
-          <textarea name="question" rows="4" required></textarea>
-        </label>
-        <label class="inline-check">
-          <input type="checkbox" name="forceHuman" />
-          Quero transferir direto para atendimento humano
-        </label>
-        <button class="btn btn-primary" type="submit">Enviar atendimento</button>
-        <small id="supportPopupFeedback"></small>
-      </form>
-
-      <div id="supportChatBox" class="stack hidden">
-        <div class="card-head">
-          <h4>Chat com atendimento</h4>
-          <p id="supportChatStatus" class="auth-tip"></p>
+      <section class="support-hero-card">
+        <strong>Atendimento Híbrido Smart Choice</strong>
+        <p>Abra seu chamado com IA e continue com humano quando necessário. O histórico fica salvo no ticket.</p>
+        <div class="support-hero-badges">
+          <span>Resposta rápida</span>
+          <span>Chat com histórico</span>
+          <span>Equipe humana real</span>
         </div>
-        <div id="supportChatMessages" class="chat-box"></div>
-        <form id="supportChatForm" class="chat-input">
-          <input type="text" name="message" placeholder="Digite sua mensagem" autocomplete="off" required />
-          <button class="btn btn-primary" type="submit">Enviar</button>
+      </section>
+
+      <div class="support-layout">
+        <form id="supportPopupForm" class="stack support-form-shell">
+          <label>Nome
+            <input type="text" name="name" required />
+          </label>
+          <label>Número do pedido (se já tiver)
+            <input type="text" name="orderNumber" />
+          </label>
+          <label>Assunto
+            <select name="subject" required>
+              <option value="Dúvida de compra">Dúvida de compra</option>
+              <option value="Acompanhar pedido">Acompanhar pedido</option>
+              <option value="Pagamento">Pagamento</option>
+              <option value="Garantia/Reembolso">Garantia/Reembolso</option>
+            </select>
+          </label>
+          <label>Mensagem
+            <textarea name="question" rows="4" required></textarea>
+          </label>
+          <label class="inline-check">
+            <input type="checkbox" name="forceHuman" />
+            Quero transferir direto para atendimento humano
+          </label>
+          <button class="btn btn-primary" type="submit">Enviar atendimento</button>
+          <small id="supportPopupFeedback"></small>
         </form>
-        <small id="supportChatFeedback"></small>
+
+        <div id="supportChatBox" class="stack support-chat-shell hidden">
+          <div class="card-head support-chat-head">
+            <h4>Chat com atendimento</h4>
+            <p id="supportChatStatus" class="auth-tip"></p>
+          </div>
+          <div id="supportChatMessages" class="chat-box"></div>
+          <form id="supportChatForm" class="chat-input">
+            <input type="text" name="message" placeholder="Digite sua mensagem" autocomplete="off" required />
+            <button class="btn btn-primary" type="submit">Enviar</button>
+          </form>
+          <small id="supportChatFeedback"></small>
+        </div>
       </div>
     </div>
   </div>

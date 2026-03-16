@@ -542,7 +542,7 @@ async function runSupportAutoReplySweep() {
       }
 
       await db.run(
-        `INSERT INTO ticket_messages (ticket_id, sender_type, sender_id, body) VALUES (?, 'AGENT', NULL, ?)`,
+        `INSERT INTO ticket_messages (ticket_id, sender_type, sender_id, body) VALUES (?, 'ADMIN', NULL, ?)`,
         [ticket.id, replyText]
       );
 

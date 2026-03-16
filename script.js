@@ -1399,7 +1399,7 @@ function renderSupportMessages(messages = []) {
   box.innerHTML = messages
     .map((m) => {
       const senderType = String(m.sender_type || "").toUpperCase();
-      const isAgent = senderType === "AGENT";
+      const isAgent = senderType === "AGENT" || (senderType === "ADMIN" && (m.sender_id == null || m.sender_id === ""));
       const isStaff = senderType === "ADMIN" || isAgent;
       const authorLabel = isAgent ? "Agente IA" : isStaff ? "Atendente" : "Você";
       return `<div class="chat-message ${isStaff ? "admin" : "user"}">

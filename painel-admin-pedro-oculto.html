@@ -73,10 +73,27 @@
           <div class="active-module-chip">
             Módulo ativo: <strong id="activeModuleLabel">Dashboard</strong>
           </div>
+          <div class="module-pages-card">
+            <h4>Páginas rápidas por função</h4>
+            <div class="module-pages-grid">
+              <a href="admin-dashboard.html">Dashboard</a>
+              <a href="admin-agente.html">Agente IA</a>
+              <a href="admin-usuarios.html">Usuários</a>
+              <a href="admin-produtos.html">Produtos</a>
+              <a href="admin-avaliacoes.html">Avaliações</a>
+              <a href="admin-pedidos.html">Pedidos</a>
+              <a href="admin-suporte.html">Suporte</a>
+              <a href="admin-auditoria.html">Auditoria</a>
+            </div>
+          </div>
           <nav class="admin-tabs">
             <button type="button" class="tab-btn active" data-tab-target="tab-dashboard">
               <span class="tab-title">Dashboard</span>
               <small class="tab-meta">Créditos e notificações</small>
+            </button>
+            <button type="button" class="tab-btn" data-tab-target="tab-agent">
+              <span class="tab-title">Agente IA</span>
+              <small class="tab-meta">Operação automática e segurança</small>
             </button>
             <button type="button" class="tab-btn" data-tab-target="tab-users">
               <span class="tab-title">Usuários</span>
@@ -144,6 +161,103 @@
                 <small id="notificationFeedback"></small>
               </section>
             </div>
+
+            <section class="panel" data-permission-gate="DISCOUNTS_MANAGE">
+              <div class="panel-head">
+                <h2>Campanhas Comerciais</h2>
+                <p>Crie campanhas com janela de tempo, desconto e prioridade.</p>
+              </div>
+              <form id="campaignForm" class="inline-grid">
+                <input type="hidden" name="campaignId" />
+                <input type="text" name="name" placeholder="Nome da campanha" required />
+                <input type="number" name="discountPercent" placeholder="Desconto %" min="0" max="80" required />
+                <input type="number" name="markupPercent" placeholder="Markup %" min="0" max="80" required />
+                <input type="datetime-local" name="startAt" required />
+                <input type="datetime-local" name="endAt" required />
+                <input type="number" name="priority" placeholder="Prioridade" value="0" />
+                <label class="inline-check">
+                  <input type="checkbox" name="isActive" checked />
+                  Campanha ativa
+                </label>
+                <button type="submit">Salvar campanha</button>
+                <button type="button" id="campaignFormResetBtn">Limpar</button>
+              </form>
+              <small id="campaignFeedback"></small>
+              <div id="campaignsList" class="table-wrap"></div>
+            </section>
+
+            <section class="panel" data-permission-gate="ANALYTICS_VIEW">
+              <div class="panel-head">
+                <h2>Relatório de Estoque Crítico</h2>
+                <p>Controle de produtos sem estoque ou com estoque baixo.</p>
+              </div>
+              <div class="toolbar-inline">
+                <input id="stockThresholdInput" type="number" min="1" max="100" value="5" />
+                <button id="refreshStockReportBtn" type="button">Atualizar relatório</button>
+              </div>
+              <div id="stockReportList" class="table-wrap"></div>
+            </section>
+          </section>
+
+          <section id="tab-agent" class="tab-panel hidden">
+            <section class="panel agent-hero">
+              <div class="panel-head">
+                <h2>Agente Administrativo Smart Choice</h2>
+                <p>Copiloto de operação, atualização e segurança do seu site com ações assistidas.</p>
+              </div>
+              <div class="agent-status-row">
+                <article id="agentStatusCard" class="agent-status-card">
+                  <h3>Status do agente</h3>
+                  <p id="agentSummaryText">Carregando diagnóstico...</p>
+                </article>
+                <label class="inline-check">
+                  <input id="agentPatrolToggle" type="checkbox" />
+                  Patrulha automática (90s)
+                </label>
+              </div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-head">
+                <h3>Ações rápidas do agente</h3>
+                <p>Comandos de manutenção para acelerar sua gestão diária.</p>
+              </div>
+              <div class="agent-quick-actions">
+                <button type="button" data-agent-action="diagnose">Gerar diagnóstico agora</button>
+                <button type="button" data-agent-action="refresh">Atualizar todos os módulos</button>
+                <button type="button" data-agent-action="close-resolved-tickets">Fechar tickets resolvidos</button>
+                <button type="button" data-agent-action="restock-critical">Ajustar estoque crítico</button>
+                <button type="button" data-agent-action="notify-maintenance">Notificar clientes (manutenção)</button>
+              </div>
+              <small id="agentActionFeedback"></small>
+            </section>
+
+            <section class="panel">
+              <div class="panel-head">
+                <h3>Alertas operacionais e de segurança</h3>
+                <p>Monitoramento ativo de estoque, pedidos, tickets e atividades sensíveis.</p>
+              </div>
+              <div id="agentAlertsList" class="agent-alerts"></div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-head">
+                <h3>Chat do agente</h3>
+                <p>Escreva comandos como: resumo, segurança, tickets, estoque, atualizar tudo.</p>
+              </div>
+              <div id="agentChatLog" class="chat-box agent-chat"></div>
+              <form id="agentCommandForm" class="chat-input">
+                <textarea
+                  id="agentCommandInput"
+                  name="command"
+                  rows="4"
+                  placeholder="Ex: faça um diagnóstico de segurança e me diga o próximo passo"
+                  required
+                ></textarea>
+                <button type="submit">Executar</button>
+              </form>
+              <small id="agentCommandFeedback"></small>
+            </section>
           </section>
 
           <section id="tab-users" class="tab-panel hidden">
@@ -215,6 +329,19 @@
                 <label class="inline-check"><input id="onlyBannedToggle" type="checkbox" /> Só banidos</label>
               </div>
               <div id="usersList" class="table-wrap"></div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-head">
+                <h2>CRM do Cliente</h2>
+                <p>Veja histórico de pedidos, créditos, tickets e engajamento.</p>
+              </div>
+              <div class="toolbar-inline">
+                <input id="crmUserIdInput" type="number" placeholder="ID do usuário para abrir CRM" />
+                <button id="loadCrmBtn" type="button">Carregar CRM</button>
+              </div>
+              <div id="crmOverview" class="table-wrap"></div>
+              <small id="crmFeedback"></small>
             </section>
           </section>
 
@@ -354,8 +481,9 @@
             <section class="panel">
               <div class="panel-head">
                 <h2>Pedidos</h2>
-                <p>Aprove pedidos pagos e acompanhe o fluxo comercial.</p>
+                <p>Kanban de operação: pagamento, separação, envio e entrega.</p>
               </div>
+              <div id="ordersKanban" class="orders-kanban"></div>
               <div id="ordersList" class="table-wrap"></div>
             </section>
           </section>
@@ -418,7 +546,7 @@
               </div>
               <div id="ticketChatMessages" class="chat-box admin-chat"></div>
               <form id="ticketChatForm" class="chat-input">
-                <input type="text" name="message" placeholder="Responder cliente aqui" autocomplete="off" required />
+                <textarea name="message" rows="4" placeholder="Responder cliente aqui" required></textarea>
                 <button class="btn btn-primary" type="submit">Enviar</button>
               </form>
               <small id="ticketChatFeedback"></small>
@@ -441,6 +569,7 @@
       </section>
     </section>
   </main>
+  <div id="adminToastStack" class="toast-stack" aria-live="polite" aria-atomic="true"></div>
 
   <script src="admin.js" defer></script>
 </body>

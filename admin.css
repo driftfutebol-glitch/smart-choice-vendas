@@ -93,6 +93,12 @@ select {
   font: inherit;
 }
 
+textarea {
+  min-height: 140px;
+  line-height: 1.45;
+  resize: vertical;
+}
+
 input::placeholder,
 textarea::placeholder {
   color: rgba(234, 244, 255, 0.55);
@@ -604,7 +610,9 @@ td.actions button {
 }
 
 .ticket-response-box textarea {
+  width: 100%;
   min-width: 240px;
+  min-height: 150px;
 }
 
 .chat-box {
@@ -636,13 +644,24 @@ td.actions button {
 }
 
 .chat-input {
-  display: flex;
+  display: grid;
   gap: 10px;
   margin-top: 10px;
+  align-items: end;
 }
 
-.chat-input input[type="text"] {
-  flex: 1;
+.chat-input input[type="text"],
+.chat-input textarea {
+  width: 100%;
+}
+
+.chat-input textarea {
+  min-height: 120px;
+  max-height: 280px;
+}
+
+.chat-input button {
+  width: 100%;
 }
 
 @media (min-width: 760px) {
@@ -673,6 +692,16 @@ td.actions button {
     align-items: center;
   }
 
+  .chat-input {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .chat-input button {
+    width: auto;
+    min-width: 170px;
+    height: fit-content;
+  }
+
   .products-toolbar {
     grid-template-columns: minmax(260px, 1fr) minmax(170px, 220px) minmax(170px, 220px) auto auto;
   }
@@ -688,6 +717,15 @@ td.actions button {
 
   .orders-kanban {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .agent-status-row {
+    grid-template-columns: 1fr auto;
+    align-items: center;
+  }
+
+  .agent-quick-actions {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
@@ -919,9 +957,127 @@ td.actions button {
   max-height: 340px;
 }
 
+.agent-hero {
+  border-color: rgba(83, 234, 255, 0.34);
+  background: linear-gradient(145deg, rgba(9, 24, 46, 0.95), rgba(8, 18, 35, 0.92));
+}
+
+.agent-status-row {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.agent-status-card {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 0.7rem;
+  background: rgba(4, 14, 28, 0.74);
+  display: grid;
+  gap: 0.35rem;
+}
+
+.agent-status-card p {
+  color: #bde6ff;
+}
+
+.agent-quick-actions {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.agent-alerts {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.agent-alert-item {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 0.65rem 0.7rem;
+  background: rgba(7, 18, 34, 0.8);
+  display: grid;
+  gap: 0.3rem;
+}
+
+.agent-alert-item h4 {
+  font-size: 0.96rem;
+}
+
+.agent-alert-item p {
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.agent-alert-item.critical {
+  border-color: rgba(255, 98, 98, 0.48);
+  box-shadow: inset 0 0 0 1px rgba(255, 98, 98, 0.24);
+}
+
+.agent-alert-item.warning {
+  border-color: rgba(255, 210, 122, 0.48);
+  box-shadow: inset 0 0 0 1px rgba(255, 210, 122, 0.2);
+}
+
+.agent-alert-item.ok {
+  border-color: rgba(167, 255, 109, 0.42);
+  box-shadow: inset 0 0 0 1px rgba(167, 255, 109, 0.2);
+}
+
+.agent-chat {
+  min-height: 190px;
+  max-height: 360px;
+}
+
+#agentCommandInput {
+  border-radius: 14px;
+  min-height: 140px;
+  padding: 0.8rem 0.85rem;
+  font-size: 0.98rem;
+}
+
+#agentCommandInput:focus {
+  outline: 2px solid rgba(52, 243, 255, 0.42);
+  box-shadow: 0 0 0 3px rgba(52, 243, 255, 0.12);
+}
+
+#ticketChatForm textarea {
+  min-height: 110px;
+}
+
+.agent-msg {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0.55rem 0.62rem;
+  background: rgba(7, 18, 35, 0.78);
+  display: grid;
+  gap: 0.2rem;
+}
+
+.agent-msg.user {
+  border-color: rgba(83, 234, 255, 0.5);
+  background: rgba(19, 53, 84, 0.52);
+}
+
+.agent-msg.agent {
+  border-color: rgba(167, 255, 109, 0.4);
+  background: rgba(25, 58, 33, 0.42);
+}
+
+.agent-msg strong {
+  font-size: 0.82rem;
+}
+
+.agent-msg p {
+  margin: 0;
+  color: #d6ecff;
+  white-space: pre-wrap;
+  line-height: 1.35;
+}
+
 .ticket-response-box textarea {
   background: rgba(5, 14, 28, 0.9);
   border-color: rgba(83, 234, 255, 0.22);
+  min-height: 150px;
 }
 
 @media (max-width: 759px) {
@@ -937,5 +1093,126 @@ td.actions button {
 
   .tab-btn {
     padding: 0.56rem 0.62rem;
+  }
+}
+
+.module-pages-card {
+  border: 1px solid rgba(83, 234, 255, 0.26);
+  border-radius: 12px;
+  padding: 0.6rem;
+  background: rgba(9, 20, 39, 0.72);
+  display: grid;
+  gap: 0.55rem;
+}
+
+.module-pages-card h4 {
+  font-size: 0.84rem;
+  color: #bfeeff;
+}
+
+.module-pages-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.45rem;
+}
+
+.module-pages-grid a {
+  border: 1px solid rgba(83, 234, 255, 0.24);
+  border-radius: 10px;
+  padding: 0.42rem 0.5rem;
+  color: #ddf8ff;
+  background: rgba(52, 243, 255, 0.07);
+  text-decoration: none;
+  font-size: 0.78rem;
+  transition: transform 0.2s ease, background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.module-pages-grid a:hover {
+  background: rgba(52, 243, 255, 0.16);
+  border-color: rgba(83, 234, 255, 0.45);
+  transform: translateY(-1px);
+}
+
+.tab-panel {
+  animation: moduleFadeIn 0.3s ease;
+}
+
+@keyframes moduleFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.995);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.toast-stack {
+  position: fixed;
+  top: 14px;
+  right: 14px;
+  z-index: 9999;
+  width: min(380px, calc(100% - 1rem));
+  display: grid;
+  gap: 0.55rem;
+  pointer-events: none;
+}
+
+.toast-popup {
+  border: 1px solid rgba(83, 234, 255, 0.28);
+  border-radius: 12px;
+  padding: 0.58rem 0.7rem;
+  background: rgba(4, 14, 28, 0.92);
+  box-shadow: 0 16px 30px rgba(0, 0, 0, 0.45);
+  color: #eaf6ff;
+  backdrop-filter: blur(8px);
+  animation: toastIn 0.24s ease;
+}
+
+.toast-popup strong {
+  display: block;
+  font-size: 0.83rem;
+}
+
+.toast-popup p {
+  margin: 0.2rem 0 0;
+  font-size: 0.86rem;
+  line-height: 1.35;
+}
+
+.toast-popup.success {
+  border-color: rgba(167, 255, 109, 0.5);
+  box-shadow: 0 16px 30px rgba(58, 104, 42, 0.35);
+}
+
+.toast-popup.error {
+  border-color: rgba(255, 98, 98, 0.55);
+  box-shadow: 0 16px 30px rgba(118, 26, 26, 0.35);
+}
+
+.toast-popup.closing {
+  animation: toastOut 0.28s ease forwards;
+}
+
+@keyframes toastIn {
+  from {
+    opacity: 0;
+    transform: translateY(-12px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes toastOut {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.97);
   }
 }

@@ -13,6 +13,7 @@ const { adjustCredits, logActivity } = require("./services/ledger");
 const { addMinutes, generateCode, isBeginnerAccount, monthRef } = require("./services/utils");
 const { triageFaq } = require("./services/triage");
 const { sendVerificationCodeEmail, boolFromEnv } = require("./services/messaging");
+const { runAdminAgent } = require("./services/adminAgentAi");
 const { ADMIN_PERMISSIONS, DEFAULT_ADMIN_PERMISSIONS } = require("./permissions");
 
 const app = express();
@@ -384,7 +385,78 @@ function isStrongPassword(password) {
   // At least 8 chars with upper, lower, number and special char.
   return /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).{8,}$/.test(candidate);
 }
+async function buildAdminAgentServerContext(db, stockThresholdRaw = null) {
+  const threshold = Math.max(1, Math.min(100, toInt(stockThresholdRaw, LOW_STOCK_THRESHOLD_DEFAULT)));
+  const now = Date.now();
+  const minus24hIso = new Date(now - 24 * 60 * 60 * 1000).toISOString();
+  const minus48hIso = new Date(now - 48 * 60 * 60 * 1000).toISOString();
 
+  const [
+    usersTotalRow,
+    adminsTotalRow,
+    activeProductsRow,
+    outOfStockRow,
+    lowStockRow,
+    pendingOrdersRow,
+    delayedPendingOrdersRow,
+    openTicketsRow,
+    sensitiveLogsRow,
+    creditAdjustLogsRow
+  ] = await Promise.all([
+    db.get("SELECT COUNT(*) AS total FROM users"),
+    db.get("SELECT COUNT(*) AS total FROM users WHERE role = 'ADMIN'"),
+    db.get("SELECT COUNT(*) AS total FROM products WHERE is_active = 1"),
+    db.get("SELECT COUNT(*) AS total FROM products WHERE is_active = 1 AND stock <= 0"),
+    db.get("SELECT COUNT(*) AS total FROM products WHERE is_active = 1 AND stock > 0 AND stock <= ?", [threshold]),
+    db.get("SELECT COUNT(*) AS total FROM orders WHERE UPPER(COALESCE(status,'')) = 'PENDING'"),
+    db.get(
+      "SELECT COUNT(*) AS total FROM orders WHERE UPPER(COALESCE(status,'')) = 'PENDING' AND created_at <= ?",
+      [minus48hIso]
+    ),
+    db.get(
+      "SELECT COUNT(*) AS total FROM tickets WHERE UPPER(COALESCE(status,'')) NOT IN ('ANSWERED','CLOSED','RESOLVED')"
+    ),
+    db.get(
+      `
+      SELECT COUNT(*) AS total
+      FROM activity_logs
+      WHERE created_at >= ?
+        AND (
+          UPPER(COALESCE(action,'')) LIKE '%CREDIT%'
+          OR UPPER(COALESCE(action,'')) LIKE '%DELETE%'
+          OR UPPER(COALESCE(action,'')) LIKE '%PASSWORD%'
+          OR UPPER(COALESCE(action,'')) LIKE '%PERMISSION%'
+          OR UPPER(COALESCE(action,'')) LIKE '%CAMPAIGN%'
+          OR UPPER(COALESCE(action,'')) LIKE '%ORDER_%'
+        )
+      `,
+      [minus24hIso]
+    ),
+    db.get(
+      `
+      SELECT COUNT(*) AS total
+      FROM activity_logs
+      WHERE created_at >= ?
+        AND UPPER(COALESCE(action,'')) LIKE '%CREDIT%'
+      `,
+      [minus24hIso]
+    )
+  ]);
+
+  return {
+    stockThreshold: threshold,
+    usersTotal: Number(usersTotalRow?.total || 0),
+    adminsTotal: Number(adminsTotalRow?.total || 0),
+    activeProducts: Number(activeProductsRow?.total || 0),
+    outOfStockProducts: Number(outOfStockRow?.total || 0),
+    lowStockProducts: Number(lowStockRow?.total || 0),
+    pendingOrders: Number(pendingOrdersRow?.total || 0),
+    delayedPendingOrders: Number(delayedPendingOrdersRow?.total || 0),
+    openTickets: Number(openTicketsRow?.total || 0),
+    sensitiveLogs24h: Number(sensitiveLogsRow?.total || 0),
+    creditAdjustLogs24h: Number(creditAdjustLogsRow?.total || 0)
+  };
+}
 function buildAutoPhoneTag(seed = "") {
   const safeSeed = String(seed).replace(/[^a-z0-9]/gi, "").toLowerCase().slice(-6) || "user";
   const timePart = Date.now().toString(36);
@@ -953,7 +1025,53 @@ app.get("/api/reviews", async (req, res) => {
       }
     });
   } catch (error) {
-    return res.status(500).json({ error: "Falha ao carregar avaliacoes" });
+    try {
+      const db = await getDb();
+      const productId = toInt(req.query.productId);
+      const limitRaw = toInt(req.query.limit, 24);
+      const limit = Math.max(1, Math.min(80, limitRaw || 24));
+
+      const whereClauses = ["p.is_active = 1"];
+      const params = [];
+
+      if (productId) {
+        whereClauses.push("r.product_id = ?");
+        params.push(productId);
+      }
+
+      const whereSql = whereClauses.length ? `WHERE ${whereClauses.join(" AND ")}` : "";
+
+      const rows = await db.all(
+        `
+        SELECT r.id, r.product_id, r.rating, r.comment, r.photo_url, r.created_at,
+               0 AS verified_purchase,
+               COALESCE(u.name, 'Cliente Smart Choice') AS user_name,
+               COALESCE(p.title, 'Produto') AS product_title,
+               COALESCE(p.brand, 'Smart Choice') AS product_brand
+        FROM reviews r
+        LEFT JOIN users u ON u.id = r.user_id
+        LEFT JOIN products p ON p.id = r.product_id
+        ${whereSql}
+        ORDER BY datetime(r.created_at) DESC, r.id DESC
+        LIMIT ?
+        `,
+        [...params, limit]
+      );
+
+      const total = rows.length;
+      const sum = rows.reduce((acc, item) => acc + Number(item.rating || 0), 0);
+
+      return res.json({
+        ok: true,
+        reviews: rows,
+        summary: {
+          total,
+          average_rating: total ? Number((sum / total).toFixed(2)) : 0
+        }
+      });
+    } catch (_fallbackError) {
+      return res.status(500).json({ error: "Falha ao carregar avaliacoes" });
+    }
   }
 });
 
@@ -1427,6 +1545,44 @@ app.get("/api/admin/me", authRequired, adminRequired, async (req, res) => {
   }
 });
 
+
+app.post("/api/admin/agent/chat", authRequired, adminRequired, async (req, res) => {
+  try {
+    const db = await getDb();
+    const command = String(req.body.command || "").trim();
+    if (!command || command.length < 2) {
+      return res.status(400).json({ error: "Comando do agente e obrigatorio" });
+    }
+
+    const clientContext = req.body.context && typeof req.body.context === "object" ? req.body.context : {};
+    const serverContext = await buildAdminAgentServerContext(db, clientContext.stockThreshold);
+    const mergedContext = {
+      ...clientContext,
+      ...serverContext,
+      alerts: Array.isArray(clientContext.alerts) ? clientContext.alerts : []
+    };
+
+    const agent = await runAdminAgent({
+      command,
+      context: mergedContext
+    });
+
+    await logActivity(db, {
+      actorUserId: req.auth.sub,
+      targetUserId: null,
+      action: "ADMIN_AGENT_CHAT",
+      details: `source=${agent.source}${agent.fallbackUsed ? ` fallback=${agent.fallbackReason || "yes"}` : ""}; cmd=${command.slice(0, 120)}`
+    });
+
+    return res.json({
+      ok: true,
+      ...agent,
+      context: serverContext
+    });
+  } catch (error) {
+    return res.status(500).json({ error: "Falha no agente administrativo" });
+  }
+});
 app.get("/api/admin/permissions/catalog", authRequired, adminRequired, requireAdminPermission("USERS_PERMISSIONS"), async (_req, res) => {
   return res.json({
     ok: true,
@@ -2867,6 +3023,7 @@ start().catch((error) => {
   console.error("Falha ao iniciar servidor:", error.message);
   process.exit(1);
 });
+
 
 
 

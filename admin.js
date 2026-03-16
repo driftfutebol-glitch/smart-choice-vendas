@@ -42,8 +42,21 @@ let logsCache = [];
 let analyticsCache = { visitors: [], signups: [] };
 let autoRefreshInterval = null;
 let crmCache = null;
+let agentPatrolInterval = null;
+let agentLastDigest = "";
+const AGENT_PATROL_MS = 90000;
+const ADMIN_DEFAULT_TAB = "tab-dashboard";
 
 const ORDER_KANBAN_COLUMNS = ["PENDING", "PAID", "PROCESSING", "SHIPPED", "DELIVERED", "CANCELLED"];
+const AGENT_EXECUTABLE_ACTIONS = new Set([
+  "none",
+  "diagnose",
+  "security-scan",
+  "refresh",
+  "close-resolved-tickets",
+  "restock-critical",
+  "notify-maintenance"
+]);
 
 function buildAutoPhoneTag(seed = "") {
   const safeSeed = String(seed).replace(/[^a-z0-9]/gi, "").toLowerCase().slice(-6) || "admin";
@@ -59,6 +72,9 @@ function setFeedback(targetId, message, type = "") {
   el.classList.remove("error", "success");
   if (type) {
     el.classList.add(type);
+  }
+  if (message && (type === "success" || type === "error")) {
+    showToast(message, type);
   }
 }
 
@@ -87,6 +103,47 @@ function escapeHtml(value) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
+}
+
+function ensureToastStack() {
+  let stack = document.getElementById("adminToastStack");
+  if (stack) return stack;
+
+  stack = document.createElement("div");
+  stack.id = "adminToastStack";
+  stack.className = "toast-stack";
+  stack.setAttribute("aria-live", "polite");
+  document.body.appendChild(stack);
+  return stack;
+}
+
+function showToast(message, type = "info") {
+  const text = String(message || "").trim();
+  if (!text) return;
+
+  const stack = ensureToastStack();
+  const toast = document.createElement("article");
+  toast.className = `toast-popup ${type}`;
+  toast.innerHTML = `
+    <strong>${type === "error" ? "Erro" : type === "success" ? "Sucesso" : "Aviso"}</strong>
+    <p>${escapeHtml(text)}</p>
+  `;
+  stack.appendChild(toast);
+
+  setTimeout(() => {
+    toast.classList.add("closing");
+  }, 3200);
+
+  setTimeout(() => {
+    toast.remove();
+  }, 3600);
+}
+
+function getTabFromHash(defaultTab = ADMIN_DEFAULT_TAB) {
+  const hash = String(window.location.hash || "").replace(/^#/, "").trim();
+  if (!hash) return defaultTab;
+  if (!document.getElementById(hash)) return defaultTab;
+  return hash;
 }
 
 function uniqueSortedValues(list, key) {
@@ -124,6 +181,10 @@ function toDateTimeLocalValue(value) {
 function parseInteger(value, fallback = 0) {
   const parsed = Number.parseInt(value, 10);
   return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function hasAnyPermission(permissions = []) {
+  return permissions.some((permission) => hasPermission(permission));
 }
 
 function formatOrderStatusLabel(status) {
@@ -222,7 +283,12 @@ function applyPermissionGates() {
   });
 }
 
-function openTab(tabId) {
+function openTab(tabId, options = {}) {
+  const { updateHash = true } = options;
+  if (!document.getElementById(tabId)) {
+    return;
+  }
+
   let activeButton = null;
   document.querySelectorAll(".tab-btn").forEach((btn) => {
     const isActive = btn.getAttribute("data-tab-target") === tabId;
@@ -241,6 +307,10 @@ function openTab(tabId) {
     const titleNode = activeButton.querySelector(".tab-title");
     activeModuleLabel.textContent = titleNode ? titleNode.textContent.trim() : activeButton.textContent.trim();
   }
+
+  if (updateHash && window.location.hash !== `#${tabId}`) {
+    history.replaceState(null, "", `${window.location.pathname}${window.location.search}#${tabId}`);
+  }
 }
 
 function setupTabs() {
@@ -251,6 +321,10 @@ function setupTabs() {
         openTab(target);
       }
     });
+  });
+
+  window.addEventListener("hashchange", () => {
+    openTab(getTabFromHash(), { updateHash: false });
   });
 }
 
@@ -1228,7 +1302,7 @@ function renderTickets() {
         ? `<p><strong>Resposta:</strong> ${ticket.admin_response || "-"}</p>`
         : `
           <div class="ticket-response-box">
-            <textarea data-ticket-response="${ticket.id}" rows="2" placeholder="Digite a resposta para o cliente"></textarea>
+            <textarea data-ticket-response="${ticket.id}" rows="4" placeholder="Digite a resposta para o cliente"></textarea>
             <button data-action="respond-ticket" data-id="${ticket.id}">Responder ticket</button>
           </div>
         `;
@@ -1388,6 +1462,558 @@ async function loadLogs() {
   renderLogs();
 }
 
+function getRecentLogsWithinHours(hours = 24) {
+  const now = Date.now();
+  const windowMs = Math.max(1, Number(hours || 24)) * 60 * 60 * 1000;
+  return logsCache.filter((log) => {
+    const createdAtMs = new Date(log.created_at).getTime();
+    if (Number.isNaN(createdAtMs)) return false;
+    return now - createdAtMs <= windowMs;
+  });
+}
+
+function buildAgentSnapshot() {
+  const users = Array.isArray(usersCache) ? usersCache : [];
+  const admins = users.filter((user) => String(user.role || "").toUpperCase() === "ADMIN");
+  const owners = admins.filter((user) => Number(user.is_owner || 0) === 1);
+  const bannedAdmins = admins.filter((user) => Number(user.is_banned || 0) === 1);
+
+  const products = Array.isArray(productsCache) ? productsCache : [];
+  const activeProducts = products.filter((product) => Number(product.is_active ?? 1) !== 0);
+  const stockThreshold = Math.max(1, Math.min(100, parseInteger(document.getElementById("stockThresholdInput")?.value, 5)));
+  const outOfStockProducts = activeProducts.filter((product) => Number(product.stock || 0) <= 0);
+  const lowStockProducts = activeProducts.filter((product) => {
+    const stock = Number(product.stock || 0);
+    return stock > 0 && stock <= stockThreshold;
+  });
+
+  const orders = Array.isArray(ordersCache) ? ordersCache : [];
+  const pendingOrders = orders.filter((order) => String(order.status || "").toUpperCase() === "PENDING");
+  const delayedPendingOrders = pendingOrders.filter((order) => {
+    const createdAtMs = new Date(order.created_at).getTime();
+    if (Number.isNaN(createdAtMs)) return false;
+    return Date.now() - createdAtMs >= 48 * 60 * 60 * 1000;
+  });
+
+  const tickets = Array.isArray(ticketsCache) ? ticketsCache : [];
+  const openTickets = tickets.filter((ticket) => !isFinalTicketStatus(ticket.status));
+
+  const recentLogs = getRecentLogsWithinHours(24);
+  const sensitiveActions = [
+    "CREDITS_ADJUST",
+    "ADMIN_USER_DELETE",
+    "USERS_DELETE",
+    "USERS_PASSWORD_RESET",
+    "ORDER_APPROVE",
+    "ORDER_STATUS_UPDATE",
+    "ADMIN_CAMPAIGN_CREATE",
+    "ADMIN_CAMPAIGN_UPDATE",
+    "ADMIN_CAMPAIGN_DISABLE"
+  ];
+
+  const sensitiveLogs = recentLogs.filter((log) => {
+    const action = String(log.action || "").toUpperCase();
+    return sensitiveActions.some((prefix) => action.includes(prefix));
+  });
+
+  const creditAdjustLogs = recentLogs.filter((log) => String(log.action || "").toUpperCase().includes("CREDIT"));
+
+  return {
+    users,
+    admins,
+    owners,
+    bannedAdmins,
+    products,
+    activeProducts,
+    stockThreshold,
+    outOfStockProducts,
+    lowStockProducts,
+    orders,
+    pendingOrders,
+    delayedPendingOrders,
+    tickets,
+    openTickets,
+    recentLogs,
+    sensitiveLogs,
+    creditAdjustLogs
+  };
+}
+
+function buildAgentAlerts(snapshot) {
+  const alerts = [];
+
+  if (snapshot.outOfStockProducts.length > 0) {
+    alerts.push({
+      level: "critical",
+      title: `${snapshot.outOfStockProducts.length} produto(s) sem estoque`,
+      detail: "Use a ação \"Ajustar estoque crítico\" para aplicar estoque mínimo automaticamente."
+    });
+  }
+
+  if (snapshot.lowStockProducts.length > 0) {
+    alerts.push({
+      level: "warning",
+      title: `${snapshot.lowStockProducts.length} produto(s) com estoque baixo`,
+      detail: `Itens abaixo do limite de ${snapshot.stockThreshold} unidades.`
+    });
+  }
+
+  if (snapshot.delayedPendingOrders.length > 0) {
+    alerts.push({
+      level: "warning",
+      title: `${snapshot.delayedPendingOrders.length} pedido(s) pendente(s) há mais de 48h`,
+      detail: "Revise os pedidos para não perder conversão de venda."
+    });
+  }
+
+  if (snapshot.openTickets.length > 0) {
+    alerts.push({
+      level: snapshot.openTickets.length >= 12 ? "critical" : "warning",
+      title: `${snapshot.openTickets.length} ticket(s) aberto(s)`,
+      detail: "Use a ação de fechamento assistido para tickets já resolvidos."
+    });
+  }
+
+  if (snapshot.owners.length > 1) {
+    alerts.push({
+      level: "warning",
+      title: `${snapshot.owners.length} contas com privilégio OWNER`,
+      detail: "Recomendado manter apenas 1 owner para reduzir risco operacional."
+    });
+  }
+
+  if (snapshot.bannedAdmins.length > 0) {
+    alerts.push({
+      level: "critical",
+      title: `${snapshot.bannedAdmins.length} admin(s) banido(s) ainda no sistema`,
+      detail: "Valide se o bloqueio foi intencional e revise permissões."
+    });
+  }
+
+  if (snapshot.creditAdjustLogs.length >= 10) {
+    alerts.push({
+      level: "critical",
+      title: `${snapshot.creditAdjustLogs.length} eventos de crédito nas últimas 24h`,
+      detail: "Revisar auditoria de créditos para evitar movimentações indevidas."
+    });
+  } else if (snapshot.creditAdjustLogs.length >= 4) {
+    alerts.push({
+      level: "warning",
+      title: `${snapshot.creditAdjustLogs.length} ajustes de crédito em 24h`,
+      detail: "Monitorar padrão de alteração de saldo no painel."
+    });
+  }
+
+  if (!alerts.length) {
+    alerts.push({
+      level: "ok",
+      title: "Operação estável",
+      detail: "Sem alertas críticos no momento. Continue com o monitoramento preventivo."
+    });
+  }
+
+  return alerts;
+}
+
+function renderAgentSummary(snapshot, alerts) {
+  const target = document.getElementById("agentSummaryText");
+  if (!target) return;
+
+  const criticalCount = alerts.filter((item) => item.level === "critical").length;
+  const warningCount = alerts.filter((item) => item.level === "warning").length;
+  target.textContent = [
+    `Usuários: ${snapshot.users.length} (admins: ${snapshot.admins.length})`,
+    `Produtos ativos: ${snapshot.activeProducts.length}`,
+    `Pedidos pendentes: ${snapshot.pendingOrders.length}`,
+    `Tickets abertos: ${snapshot.openTickets.length}`,
+    `Alertas: ${criticalCount} crítico(s), ${warningCount} aviso(s)`
+  ].join(" | ");
+}
+
+function renderAgentAlerts(alerts = []) {
+  const target = document.getElementById("agentAlertsList");
+  if (!target) return;
+
+  target.innerHTML = alerts
+    .map((alert) => `
+      <article class="agent-alert-item ${escapeHtml(alert.level || "warning")}">
+        <h4>${escapeHtml(alert.title || "Alerta")}</h4>
+        <p>${escapeHtml(alert.detail || "-")}</p>
+      </article>
+    `)
+    .join("");
+}
+
+function appendAgentMessage(role, message) {
+  const log = document.getElementById("agentChatLog");
+  if (!log) return;
+
+  const safeRole = role === "user" ? "Você" : "Agente";
+  const safeClass = role === "user" ? "user" : "agent";
+  const safeMessage = escapeHtml(message || "").replace(/\n/g, "<br>");
+  const timestamp = new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+
+  log.insertAdjacentHTML(
+    "beforeend",
+    `
+      <article class="agent-msg ${safeClass}">
+        <strong>${safeRole} • ${timestamp}</strong>
+        <p>${safeMessage}</p>
+      </article>
+    `
+  );
+
+  while (log.children.length > 80) {
+    log.removeChild(log.firstElementChild);
+  }
+
+  log.scrollTop = log.scrollHeight;
+}
+
+function buildAgentDigest(alerts = []) {
+  return alerts.map((item) => `${item.level}:${item.title}`).join("|");
+}
+
+function buildOperationsReport(snapshot, alerts) {
+  const critical = alerts.filter((item) => item.level === "critical").length;
+  const warning = alerts.filter((item) => item.level === "warning").length;
+
+  return [
+    "Diagnóstico operacional concluído.",
+    `- Alertas críticos: ${critical}`,
+    `- Alertas de atenção: ${warning}`,
+    `- Produtos sem estoque: ${snapshot.outOfStockProducts.length}`,
+    `- Pedidos pendentes: ${snapshot.pendingOrders.length}`,
+    `- Tickets abertos: ${snapshot.openTickets.length}`,
+    "Se quiser, eu executo ações automáticas com confirmação antes de aplicar."
+  ].join("\n");
+}
+
+function buildSecurityReport(snapshot) {
+  return [
+    "Relatório de segurança do painel:",
+    `- Admins totais: ${snapshot.admins.length}`,
+    `- Owners: ${snapshot.owners.length}`,
+    `- Admins banidos: ${snapshot.bannedAdmins.length}`,
+    `- Eventos sensíveis em 24h: ${snapshot.sensitiveLogs.length}`,
+    `- Ajustes de crédito em 24h: ${snapshot.creditAdjustLogs.length}`,
+    snapshot.owners.length > 1
+      ? "- Recomendação: manter somente 1 owner ativo."
+      : "- Recomendação: estrutura de owner está adequada."
+  ].join("\n");
+}
+
+function normalizeSuggestedAgentAction(action) {
+  const normalized = String(action || "").trim().toLowerCase();
+  if (!AGENT_EXECUTABLE_ACTIONS.has(normalized)) {
+    return "none";
+  }
+  return normalized;
+}
+
+function buildAgentContextPayload(snapshot, alerts) {
+  return {
+    stockThreshold: Number(snapshot?.stockThreshold || 5),
+    usersTotal: Number(snapshot?.users?.length || 0),
+    adminsTotal: Number(snapshot?.admins?.length || 0),
+    activeProducts: Number(snapshot?.activeProducts?.length || 0),
+    outOfStockProducts: Number(snapshot?.outOfStockProducts?.length || 0),
+    lowStockProducts: Number(snapshot?.lowStockProducts?.length || 0),
+    pendingOrders: Number(snapshot?.pendingOrders?.length || 0),
+    delayedPendingOrders: Number(snapshot?.delayedPendingOrders?.length || 0),
+    openTickets: Number(snapshot?.openTickets?.length || 0),
+    sensitiveLogs24h: Number(snapshot?.sensitiveLogs?.length || 0),
+    creditAdjustLogs24h: Number(snapshot?.creditAdjustLogs?.length || 0),
+    alerts: (alerts || []).slice(0, 8).map((alert) => ({
+      level: String(alert.level || "").slice(0, 20),
+      title: String(alert.title || "").slice(0, 120),
+      detail: String(alert.detail || "").slice(0, 180)
+    }))
+  };
+}
+
+async function askAgentBackend(command, snapshot, alerts) {
+  const payload = {
+    command: String(command || "").trim(),
+    context: buildAgentContextPayload(snapshot, alerts)
+  };
+  return apiRequest("/admin/agent/chat", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+function refreshAgentPanel({ announce = false } = {}) {
+  const snapshot = buildAgentSnapshot();
+  const alerts = buildAgentAlerts(snapshot);
+  renderAgentSummary(snapshot, alerts);
+  renderAgentAlerts(alerts);
+
+  const digest = buildAgentDigest(alerts);
+  const patrolEnabled = Boolean(document.getElementById("agentPatrolToggle")?.checked);
+  const changed = agentLastDigest && digest !== agentLastDigest;
+
+  if (announce || (patrolEnabled && changed)) {
+    appendAgentMessage("agent", buildOperationsReport(snapshot, alerts));
+  }
+
+  if (!agentLastDigest) {
+    appendAgentMessage("agent", "Agente administrativo online. Envie um comando para começar.");
+  }
+
+  agentLastDigest = digest;
+  return { snapshot, alerts };
+}
+
+async function closeResolvedTicketsWithAgent() {
+  if (!hasPermission("TICKETS_MANAGE")) {
+    throw new Error("Sem permissão para gerenciar tickets.");
+  }
+
+  const now = Date.now();
+  const candidates = ticketsCache.filter((ticket) => {
+    if (isFinalTicketStatus(ticket.status)) return false;
+    const aiResolved = String(ticket.ai_resolution || "").trim().length > 0;
+    const createdAtMs = new Date(ticket.created_at).getTime();
+    const stale = Number.isFinite(createdAtMs) ? now - createdAtMs >= 72 * 60 * 60 * 1000 : false;
+    return aiResolved || stale;
+  });
+
+  if (!candidates.length) {
+    return { closed: 0, total: 0 };
+  }
+
+  const confirmed = window.confirm(`Fechar ${candidates.length} ticket(s) resolvido(s)/antigo(s)?`);
+  if (!confirmed) {
+    return { closed: 0, total: candidates.length, cancelled: true };
+  }
+
+  let closed = 0;
+  for (const ticket of candidates.slice(0, 80)) {
+    try {
+      await apiRequest(`/admin/tickets/${ticket.id}/status`, {
+        method: "PATCH",
+        body: JSON.stringify({ status: "CLOSED" })
+      });
+      closed += 1;
+    } catch (_error) {
+      // segue para próximo ticket
+    }
+  }
+
+  await loadTickets();
+  return { closed, total: candidates.length };
+}
+
+async function restockCriticalProductsWithAgent() {
+  if (!hasPermission("PRODUCTS_MANAGE")) {
+    throw new Error("Sem permissão para gerenciar produtos.");
+  }
+
+  const targetStock = Math.max(1, Math.min(100, parseInteger(document.getElementById("stockThresholdInput")?.value, 5)));
+  const candidates = productsCache.filter((product) => Number(product.is_active ?? 1) !== 0 && Number(product.stock || 0) <= 0);
+
+  if (!candidates.length) {
+    return { updated: 0, total: 0 };
+  }
+
+  const confirmed = window.confirm(`Definir estoque ${targetStock} para ${candidates.length} produto(s) sem estoque?`);
+  if (!confirmed) {
+    return { updated: 0, total: candidates.length, cancelled: true };
+  }
+
+  let updated = 0;
+  for (const product of candidates.slice(0, 80)) {
+    try {
+      await apiRequest(`/admin/products/${product.id}`, {
+        method: "PUT",
+        body: JSON.stringify({ stock: targetStock, is_active: true })
+      });
+      updated += 1;
+    } catch (_error) {
+      // segue para próximo produto
+    }
+  }
+
+  await loadProducts();
+  if (hasPermission("ANALYTICS_VIEW")) {
+    await loadStockReport();
+  }
+  return { updated, total: candidates.length, targetStock };
+}
+
+async function notifyMaintenanceWithAgent() {
+  if (!hasPermission("NOTIFICATIONS_MANAGE")) {
+    throw new Error("Sem permissão para enviar notificações.");
+  }
+
+  const confirmed = window.confirm("Enviar aviso geral de atualização/segurança para todos os clientes?");
+  if (!confirmed) {
+    return { sent: false, cancelled: true };
+  }
+
+  await apiRequest("/admin/notifications/send", {
+    method: "POST",
+    body: JSON.stringify({
+      userId: null,
+      title: "Smart Choice Vendas: atualização de plataforma",
+      message: "Estamos aplicando melhorias de desempenho e segurança. Seus dados e créditos seguem protegidos."
+    })
+  });
+
+  return { sent: true };
+}
+
+async function runAgentAction(action) {
+  if (!currentAdmin) {
+    throw new Error("Faça login no painel para usar o agente.");
+  }
+
+  if (action === "help") {
+    appendAgentMessage(
+      "agent",
+      "Comandos: resumo | segurança | atualizar tudo | fechar tickets resolvidos | ajustar estoque | notificar manutenção."
+    );
+    return;
+  }
+
+  if (action === "refresh") {
+    await refreshAll();
+    const { snapshot, alerts } = refreshAgentPanel({ announce: false });
+    appendAgentMessage("agent", buildOperationsReport(snapshot, alerts));
+    return;
+  }
+
+  if (action === "diagnose") {
+    const { snapshot, alerts } = refreshAgentPanel({ announce: false });
+    appendAgentMessage("agent", buildOperationsReport(snapshot, alerts));
+    return;
+  }
+
+  if (action === "security-scan") {
+    const snapshot = buildAgentSnapshot();
+    appendAgentMessage("agent", buildSecurityReport(snapshot));
+    return;
+  }
+
+  if (action === "close-resolved-tickets") {
+    const result = await closeResolvedTicketsWithAgent();
+    if (result.cancelled) {
+      appendAgentMessage("agent", "Ação cancelada. Nenhum ticket foi fechado.");
+      return;
+    }
+    appendAgentMessage("agent", `Tickets fechados: ${result.closed}/${result.total}.`);
+    refreshAgentPanel({ announce: false });
+    return;
+  }
+
+  if (action === "restock-critical") {
+    const result = await restockCriticalProductsWithAgent();
+    if (result.cancelled) {
+      appendAgentMessage("agent", "Ajuste de estoque cancelado.");
+      return;
+    }
+    appendAgentMessage("agent", `Estoque ajustado para ${result.updated}/${result.total} produto(s) (alvo: ${result.targetStock}).`);
+    refreshAgentPanel({ announce: false });
+    return;
+  }
+
+  if (action === "notify-maintenance") {
+    const result = await notifyMaintenanceWithAgent();
+    if (result.cancelled) {
+      appendAgentMessage("agent", "Envio de notificação cancelado.");
+      return;
+    }
+    appendAgentMessage("agent", "Notificação de atualização enviada para clientes.");
+    return;
+  }
+
+  appendAgentMessage(
+    "agent",
+    "Não reconheci o comando. Use: resumo, segurança, atualizar tudo, fechar tickets, ajustar estoque, notificar manutenção."
+  );
+}
+
+function parseAgentCommand(commandText) {
+  const command = normalizeText(commandText || "");
+  if (!command) return "diagnose";
+
+  if (command.includes("segur")) return "security-scan";
+  if (command.includes("atualiz")) return "refresh";
+  if (command.includes("resumo") || command.includes("diagnost")) return "diagnose";
+  if ((command.includes("ticket") || command.includes("chamado")) && (command.includes("fech") || command.includes("resolv"))) {
+    return "close-resolved-tickets";
+  }
+  if (command.includes("estoque")) return "restock-critical";
+  if (command.includes("notific") || command.includes("aviso")) return "notify-maintenance";
+  if (command.includes("ajuda") || command.includes("comando")) return "help";
+
+  return "help";
+}
+
+async function handleAgentCommand(event) {
+  event.preventDefault();
+  const input = document.getElementById("agentCommandInput");
+  const command = String(input?.value || "").trim();
+  if (!command) return;
+
+  appendAgentMessage("user", command);
+  if (input) input.value = "";
+
+  try {
+    const { snapshot, alerts } = refreshAgentPanel({ announce: false });
+    const result = await askAgentBackend(command, snapshot, alerts);
+    if (result?.reply) {
+      appendAgentMessage("agent", result.reply);
+    } else {
+      appendAgentMessage("agent", "Comando recebido. Sem resposta textual da IA.");
+    }
+
+    const suggestedAction = normalizeSuggestedAgentAction(result?.suggestedAction);
+    if (suggestedAction && suggestedAction !== "none") {
+      const confirmRun = window.confirm(`A IA sugeriu executar: ${suggestedAction}. Deseja aplicar agora?`);
+      if (confirmRun) {
+        await runAgentAction(suggestedAction);
+      }
+    }
+
+    const sourceLabel = result?.source === "openai" ? "IA online" : "modo local";
+    setFeedback("agentCommandFeedback", `Comando executado (${sourceLabel}).`, "success");
+  } catch (error) {
+    try {
+      appendAgentMessage("agent", "IA indisponível agora. Executando modo local de contingência.");
+      const localAction = parseAgentCommand(command);
+      await runAgentAction(localAction);
+      setFeedback("agentCommandFeedback", "Comando executado em modo local.", "success");
+    } catch (fallbackError) {
+      setFeedback("agentCommandFeedback", fallbackError.message, "error");
+      appendAgentMessage("agent", `Falha ao executar comando: ${fallbackError.message}`);
+    }
+  }
+}
+
+function setAgentPatrol(enabled) {
+  if (agentPatrolInterval) {
+    clearInterval(agentPatrolInterval);
+    agentPatrolInterval = null;
+  }
+
+  localStorage.setItem("scv_agent_patrol", enabled ? "1" : "0");
+
+  const toggle = document.getElementById("agentPatrolToggle");
+  if (toggle) {
+    toggle.checked = Boolean(enabled);
+  }
+
+  if (!enabled || !adminToken) {
+    return;
+  }
+
+  agentPatrolInterval = setInterval(async () => {
+    await refreshAll().catch(() => {});
+  }, AGENT_PATROL_MS);
+}
+
 async function refreshAll() {
   const tasks = [
     loadAnalytics(),
@@ -1416,6 +2042,10 @@ async function refreshAll() {
   }
 
   await Promise.allSettled(tasks);
+
+  if (currentAdmin) {
+    refreshAgentPanel({ announce: false });
+  }
 }
 
 function loadPermissionsFromUser(userId) {
@@ -1459,8 +2089,9 @@ async function handleAdminLogin(event) {
 
     showApp();
     applyPermissionGates();
-    openTab("tab-dashboard");
+    openTab(getTabFromHash(), { updateHash: false });
     await refreshAll();
+    setAgentPatrol(localStorage.getItem("scv_agent_patrol") === "1");
     setFeedback("adminLoginFeedback", "Login admin realizado com sucesso.", "success");
   } catch (error) {
     setFeedback("adminLoginFeedback", error.message, "error");
@@ -1472,6 +2103,11 @@ function logoutAdmin() {
     clearInterval(autoRefreshInterval);
     autoRefreshInterval = null;
   }
+  if (agentPatrolInterval) {
+    clearInterval(agentPatrolInterval);
+    agentPatrolInterval = null;
+  }
+  agentLastDigest = "";
 
   localStorage.removeItem("scv_admin_token");
   adminToken = "";
@@ -1728,6 +2364,7 @@ function bindActions() {
   document.getElementById("productCreateForm")?.addEventListener("submit", handleProductSave);
   document.getElementById("reviewEditForm")?.addEventListener("submit", handleReviewEdit);
   document.getElementById("ticketChatForm")?.addEventListener("submit", sendTicketChat);
+  document.getElementById("agentCommandForm")?.addEventListener("submit", handleAgentCommand);
   document.getElementById("applyQuickCategoryBtn")?.addEventListener("click", applyQuickCategoryPreset);
   document.getElementById("newProductBtn")?.addEventListener("click", () => {
     resetProductForm();
@@ -1759,6 +2396,23 @@ function bindActions() {
   document.getElementById("logoutAdminBtn")?.addEventListener("click", logoutAdmin);
   document.getElementById("autoRefreshToggle")?.addEventListener("change", (event) => {
     setAutoRefresh(Boolean(event.target.checked));
+  });
+  document.getElementById("agentPatrolToggle")?.addEventListener("change", (event) => {
+    setAgentPatrol(Boolean(event.target.checked));
+  });
+
+  document.querySelectorAll("button[data-agent-action]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const action = button.getAttribute("data-agent-action");
+      if (!action) return;
+      setFeedback("agentActionFeedback", "Executando ação do agente...", "");
+      try {
+        await runAgentAction(action);
+        setFeedback("agentActionFeedback", "Ação concluída com sucesso.", "success");
+      } catch (error) {
+        setFeedback("agentActionFeedback", error.message, "error");
+      }
+    });
   });
 
   document.getElementById("loadAdminPermissionsBtn")?.addEventListener("click", () => {
@@ -1965,7 +2619,16 @@ async function bootstrap() {
   bindActions();
   bindFilters();
 
+  const toggle = document.getElementById("agentPatrolToggle");
+  if (toggle) {
+    toggle.checked = localStorage.getItem("scv_agent_patrol") === "1";
+  }
+
   if (!adminToken) {
+    if (agentPatrolInterval) {
+      clearInterval(agentPatrolInterval);
+      agentPatrolInterval = null;
+    }
     return;
   }
 
@@ -1974,8 +2637,9 @@ async function bootstrap() {
     await loadPermissionsCatalog();
     showApp();
     applyPermissionGates();
-    openTab("tab-dashboard");
+    openTab(getTabFromHash(), { updateHash: false });
     await refreshAll();
+    setAgentPatrol(localStorage.getItem("scv_agent_patrol") === "1");
   } catch (_error) {
     localStorage.removeItem("scv_admin_token");
     adminToken = "";

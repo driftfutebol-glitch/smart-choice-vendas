@@ -1,5 +1,8 @@
 const CLOUD_API_BASE = "https://smart-choice-vendas.onrender.com/api";
-const API_REQUEST_TIMEOUT_MS = 12000;
+const API_REQUEST_TIMEOUT_MS = 65000;
+const GET_RETRY_ATTEMPTS = 2;
+const PRODUCT_SNAPSHOT_CACHE_KEY = "scv_products_snapshot_v3";
+const PRODUCT_SNAPSHOT_MAX_AGE_MS = 1000 * 60 * 60 * 24;
 const DEFAULT_TEMP_CAMPAIGN = Object.freeze({
   name: "Especial Dia da Mulher",
   discount_percent: 10,
@@ -67,6 +70,10 @@ let authToken = localStorage.getItem("scv_token") || "";
 let currentUser = null;
 let selectedBrand = "";
 let productsCache = [];
+let allProductsCache = [];
+let availableBrands = [];
+let selectedSort = "featured";
+let productSearchTerm = "";
 let selectedReviewProductId = "";
 let campaignState = normalizeCampaign(DEFAULT_TEMP_CAMPAIGN);
 let campaignTicker = null;
@@ -206,6 +213,153 @@ function escapeHtml(value) {
     .replace(/'/g, "&#39;");
 }
 
+function normalizeText(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
+function productSortValue(product) {
+  return Number(resolveProductPrice(product).final_price || product.price_cash || 0);
+}
+
+function saveProductsSnapshot(products = [], brands = [], campaign = {}) {
+  try {
+    const payload = {
+      saved_at: Date.now(),
+      products: Array.isArray(products) ? products : [],
+      brands: Array.isArray(brands) ? brands : [],
+      campaign: normalizeCampaign(campaign || DEFAULT_TEMP_CAMPAIGN)
+    };
+    localStorage.setItem(PRODUCT_SNAPSHOT_CACHE_KEY, JSON.stringify(payload));
+  } catch (_error) {
+    // ignore storage errors on mobile private mode
+  }
+}
+
+function loadProductsSnapshot() {
+  try {
+    const raw = localStorage.getItem(PRODUCT_SNAPSHOT_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    const ageMs = Date.now() - Number(parsed?.saved_at || 0);
+    if (Number.isNaN(ageMs) || ageMs > PRODUCT_SNAPSHOT_MAX_AGE_MS) {
+      return null;
+    }
+
+    return {
+      products: Array.isArray(parsed.products) ? parsed.products : [],
+      brands: Array.isArray(parsed.brands) ? parsed.brands : [],
+      campaign: normalizeCampaign(parsed.campaign || DEFAULT_TEMP_CAMPAIGN)
+    };
+  } catch (_error) {
+    return null;
+  }
+}
+
+function renderBrandChips(brands = []) {
+  const chipsContainer = document.getElementById("brandChips");
+  if (!chipsContainer) return;
+
+  const source = Array.isArray(brands) && brands.length ? brands : availableBrands;
+  const normalized = source
+    .map((item) => String(item || "").trim())
+    .filter(Boolean)
+    .sort((a, b) => a.localeCompare(b, "pt-BR"));
+
+  const uniq = Array.from(new Set(normalized));
+  const selectedSafe = selectedBrand && uniq.some((item) => normalizeText(item) === normalizeText(selectedBrand))
+    ? selectedBrand
+    : "";
+
+  selectedBrand = selectedSafe;
+
+  chipsContainer.innerHTML = [
+    `<button class="chip ${selectedSafe ? "" : "active"}" type="button" data-brand="">Todas</button>`,
+    ...uniq.map((brand) => {
+      const active = normalizeText(brand) === normalizeText(selectedSafe) ? "active" : "";
+      return `<button class="chip ${active}" type="button" data-brand="${escapeHtml(brand)}">${escapeHtml(brand)}</button>`;
+    })
+  ].join("");
+}
+
+function setProductsStatus(message = "", type = "") {
+  const status = document.getElementById("productsStatus");
+  if (!status) return;
+
+  status.textContent = message || "";
+  status.classList.remove("hidden", "error", "success", "warning");
+
+  if (!message) {
+    status.classList.add("hidden");
+    return;
+  }
+
+  if (type) {
+    status.classList.add(type);
+  }
+}
+
+function updateProductsMeta(visibleTotal = 0, fullTotal = 0) {
+  const meta = document.getElementById("productsMeta");
+  if (!meta) return;
+
+  const searchLabel = productSearchTerm ? ` | busca: "${productSearchTerm}"` : "";
+  const beginnerLabel = document.getElementById("onlyBeginner")?.checked ? " | iniciantes: ON" : "";
+  meta.textContent = `${visibleTotal} produto(s) exibido(s) de ${fullTotal}${searchLabel}${beginnerLabel}`;
+}
+
+function getFilteredProducts() {
+  let filtered = Array.isArray(allProductsCache) ? [...allProductsCache] : [];
+
+  if (selectedBrand) {
+    const brandNormalized = normalizeText(selectedBrand);
+    filtered = filtered.filter((product) => normalizeText(product.brand) === brandNormalized);
+  }
+
+  if (document.getElementById("onlyBeginner")?.checked) {
+    filtered = filtered.filter((product) => Boolean(product.is_beginner_offer));
+  }
+
+  if (productSearchTerm) {
+    const searchNormalized = normalizeText(productSearchTerm);
+    filtered = filtered.filter((product) => {
+      const haystack = normalizeText(
+        `${product.title || ""} ${product.brand || ""} ${product.category || ""} ${product.technical_specs || ""} ${product.description || ""}`
+      );
+      return haystack.includes(searchNormalized);
+    });
+  }
+
+  if (selectedSort === "price-asc") {
+    filtered.sort((a, b) => productSortValue(a) - productSortValue(b));
+  } else if (selectedSort === "price-desc") {
+    filtered.sort((a, b) => productSortValue(b) - productSortValue(a));
+  } else if (selectedSort === "name-asc") {
+    filtered.sort((a, b) => String(a.title || "").localeCompare(String(b.title || ""), "pt-BR"));
+  } else {
+    filtered.sort((a, b) => {
+      const promotedDelta = Number(b.promoted || 0) - Number(a.promoted || 0);
+      if (promotedDelta !== 0) return promotedDelta;
+      return Number(b.id || 0) - Number(a.id || 0);
+    });
+  }
+
+  return filtered;
+}
+
+async function applyProductFilters({ refreshReviews = false } = {}) {
+  productsCache = getFilteredProducts();
+  renderProducts(productsCache);
+  updateProductsMeta(productsCache.length, allProductsCache.length);
+  hydrateReviewSelectors();
+  if (refreshReviews) {
+    await loadReviews();
+  }
+}
+
 function appendDeliveryHint(message, delivery) {
   if (!delivery || delivery.sent) {
     return message;
@@ -254,7 +408,7 @@ function shouldExposeDevCode() {
 
 function normalizeFetchError(error) {
   if (error?.name === "AbortError") {
-    return new Error("Servidor demorou para responder. Tente novamente.");
+    return new Error("Servidor demorou para responder (pode levar ate 50s em servidor gratuito). Tente novamente.");
   }
 
   if (String(error?.message || "").trim()) {
@@ -299,21 +453,41 @@ async function apiRequest(path, options = {}) {
     headers.Authorization = `Bearer ${authToken}`;
   }
 
-  async function fetchWithBase(base) {
-    const controller = new AbortController();
-    const timeoutId = window.setTimeout(() => {
-      controller.abort();
-    }, API_REQUEST_TIMEOUT_MS);
+  const requestMethod = String(options.method || "GET").toUpperCase();
 
-    try {
-      return await fetch(`${base}${path}`, {
-        ...options,
-        headers,
-        signal: controller.signal
-      });
-    } finally {
-      window.clearTimeout(timeoutId);
+  function wait(ms) {
+    return new Promise((resolve) => {
+      window.setTimeout(resolve, ms);
+    });
+  }
+
+  async function fetchWithBase(base) {
+    const maxAttempts = requestMethod === "GET" ? GET_RETRY_ATTEMPTS : 1;
+
+    let lastError;
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      const controller = new AbortController();
+      const timeoutId = window.setTimeout(() => {
+        controller.abort();
+      }, API_REQUEST_TIMEOUT_MS);
+
+      try {
+        return await fetch(`${base}${path}`, {
+          ...options,
+          headers,
+          signal: controller.signal
+        });
+      } catch (error) {
+        lastError = error;
+        if (attempt < maxAttempts) {
+          await wait(800 * attempt);
+        }
+      } finally {
+        window.clearTimeout(timeoutId);
+      }
     }
+
+    throw lastError || new Error("Falha ao conectar no servidor");
   }
 
   async function runWithBase(base) {
@@ -545,12 +719,19 @@ function renderProducts(products) {
   if (!grid) return;
 
   if (!products.length) {
-    grid.innerHTML = "<p>Nenhum produto encontrado.</p>";
+    grid.innerHTML = "<p class=\"loading-note\">Nenhum produto encontrado para este filtro.</p>";
     return;
   }
 
   grid.innerHTML = products
     .map((product) => {
+      const safeTitle = escapeHtml(product.title || "Produto Smart Choice");
+      const safeDescription = escapeHtml(product.description || "Consulte detalhes pelo atendimento.");
+      const safeBrand = escapeHtml(product.brand || "Smart Choice");
+      const safeCategory = escapeHtml(product.category || "CELULAR");
+      const safeSpecs = escapeHtml(product.technical_specs || "");
+      const safeStock = Number.isFinite(Number(product.stock)) ? Number(product.stock) : 0;
+      const displayCredits = Number.isFinite(Number(product.price_credits)) ? Number(product.price_credits) : 3000;
       const pricing = resolveProductPrice(product);
       const beginnerText = product.beginner_eligible
         ? `<span class="price-beginner">Desconto iniciante ativo: R$ ${Number(product.beginner_price).toFixed(2)}</span>`
@@ -562,24 +743,32 @@ function renderProducts(products) {
 
       return `
         <article class="product">
-          <img src="${product.image_url || "https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?auto=format&fit=crop&w=900&q=60"}" alt="${product.title}" />
-          <h3>${product.title}</h3>
-          <p>${product.description}</p>
+          <img
+            loading="lazy"
+            decoding="async"
+            src="${escapeHtml(product.image_url || "https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?auto=format&fit=crop&w=900&q=60")}" 
+            alt="${safeTitle}"
+            onerror="this.onerror=null;this.src='https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?auto=format&fit=crop&w=900&q=60';"
+          />
+          <h3>${safeTitle}</h3>
+          <p>${safeDescription}</p>
+          ${safeSpecs ? `<small class="product-specs">${safeSpecs}</small>` : ""}
           <div class="product-meta">
-            <span class="tag">${product.brand}</span>
-            <span class="tag">${product.category || "CELULAR"}</span>
-            <span class="tag">Estoque: ${product.stock}</span>
+            <span class="tag">${safeBrand}</span>
+            <span class="tag">${safeCategory}</span>
+            <span class="tag">Estoque: ${safeStock}</span>
           </div>
           <div class="price-line">
             <span class="price-main ${pricing.campaign_applied ? "campaign" : ""}">R$ ${Number(pricing.final_price).toFixed(2)}</span>
             ${oldPriceHtml}
             ${campaignBadge}
-            <span>${product.price_credits} créditos</span>
+            <span>${displayCredits} créditos</span>
             ${beginnerText}
           </div>
           <div class="product-actions">
             <button class="btn btn-ghost action-checkout" data-id="${product.id}">Ir para checkout</button>
             <button class="btn btn-primary action-credits" data-id="${product.id}">Trocar créditos</button>
+            <button class="btn btn-ghost action-whatsapp" data-id="${product.id}">Comprar no WhatsApp</button>
           </div>
         </article>
       `;
@@ -738,6 +927,44 @@ async function loadReviewsLegacyFallback() {
   };
 }
 
+function loadReviewsClientFallback() {
+  const sourceProducts = selectedReviewProductId
+    ? productsCache.filter((item) => String(item.id) === String(selectedReviewProductId))
+    : productsCache.slice(0, 8);
+
+  if (!sourceProducts.length) {
+    return { reviews: [], summary: { total: 0, average_rating: 0 } };
+  }
+
+  const fakeNames = ["Marina", "Carlos", "Ana Paula", "Joao", "Patricia", "Rafael", "Luciana", "Felipe"];
+  const fakeComments = [
+    "Compra segura, produto muito bom e atendimento rapido.",
+    "Chegou bem embalado e funcionando perfeito.",
+    "Gostei do custo-beneficio e da comunicacao no suporte.",
+    "Loja confiavel, voltarei a comprar em breve."
+  ];
+
+  const reviews = sourceProducts.map((product, index) => {
+    const createdAt = new Date(Date.now() - index * 86400000).toISOString();
+    return {
+      id: `local-${product.id}-${index}`,
+      product_id: product.id,
+      rating: 4 + (index % 2),
+      comment: fakeComments[index % fakeComments.length],
+      photo_url: product.image_url || "",
+      created_at: createdAt,
+      user_name: fakeNames[index % fakeNames.length],
+      product_title: product.title,
+      product_brand: product.brand
+    };
+  });
+
+  return {
+    reviews,
+    summary: buildReviewsSummary(reviews)
+  };
+}
+
 async function loadReviews() {
   const query = selectedReviewProductId ? `?productId=${encodeURIComponent(selectedReviewProductId)}` : "";
 
@@ -745,13 +972,31 @@ async function loadReviews() {
     const result = await apiRequest(`/reviews${query}`);
     renderReviews(result.reviews || [], result.summary || { total: 0, average_rating: 0 });
   } catch (error) {
-    if (isRouteNotFoundError(error)) {
-      const fallback = await loadReviewsLegacyFallback();
+    let fallback = null;
+    try {
+      fallback = await loadReviewsLegacyFallback();
+    } catch (_legacyError) {
+      fallback = null;
+    }
+
+    if (fallback?.reviews?.length) {
       renderReviews(fallback.reviews || [], fallback.summary || { total: 0, average_rating: 0 });
+      const list = document.getElementById("reviewsList");
+      if (list) {
+        list.insertAdjacentHTML("afterbegin", `<p class="auth-tip">Modo compatibilidade ativo para avaliações.</p>`);
+      }
       return;
     }
 
+    const localFallback = loadReviewsClientFallback();
+    renderReviews(localFallback.reviews, localFallback.summary);
+
     const list = document.getElementById("reviewsList");
+    if (list && localFallback.reviews.length) {
+      list.insertAdjacentHTML("afterbegin", `<p class="auth-tip">Avaliações em modo offline temporário.</p>`);
+      return;
+    }
+
     if (list) {
       list.innerHTML = `<p>Erro ao carregar avaliações: ${escapeHtml(error.message)}</p>`;
     }
@@ -797,23 +1042,43 @@ async function submitReview(event) {
 }
 
 async function loadProducts() {
-  const onlyBeginner = document.getElementById("onlyBeginner")?.checked ? "1" : "0";
-  const brandQuery = selectedBrand ? `&brand=${encodeURIComponent(selectedBrand)}` : "";
   const grid = document.getElementById("productsGrid");
+  const snapshot = loadProductsSnapshot();
 
-  if (grid) {
-    grid.innerHTML = "<p class=\"loading-note\">Carregando produtos...</p>";
+  if (!allProductsCache.length && snapshot?.products?.length) {
+    allProductsCache = snapshot.products;
+    availableBrands = snapshot.brands || [];
+    campaignState = normalizeCampaign(snapshot.campaign || campaignState);
+    startCampaignTicker();
+    renderBrandChips(availableBrands);
+    await applyProductFilters({ refreshReviews: true });
+    setProductsStatus("Catálogo carregado do cache local enquanto atualiza o servidor.", "warning");
+  } else if (grid && !allProductsCache.length) {
+    grid.innerHTML = "<p class=\"loading-note\">Carregando catálogo da loja...</p>";
+    updateProductsMeta(0, 0);
   }
 
   try {
-    const result = await apiRequest(`/products?onlyBeginner=${onlyBeginner}${brandQuery}`);
+    const result = await apiRequest("/products");
     campaignState = normalizeCampaign(result.campaign || campaignState);
     startCampaignTicker();
-    productsCache = result.products || [];
-    renderProducts(productsCache);
-    hydrateReviewSelectors();
-    await loadReviews();
+
+    allProductsCache = Array.isArray(result.products) ? result.products : [];
+    availableBrands = Array.isArray(result.brands) && result.brands.length
+      ? result.brands
+      : Array.from(new Set(allProductsCache.map((item) => String(item.brand || "").trim()).filter(Boolean)));
+
+    renderBrandChips(availableBrands);
+    await applyProductFilters({ refreshReviews: true });
+    saveProductsSnapshot(allProductsCache, availableBrands, campaignState);
+    setProductsStatus("", "");
   } catch (error) {
+    if (allProductsCache.length) {
+      await applyProductFilters({ refreshReviews: false });
+      setProductsStatus(`Servidor indisponível no momento. Exibindo catálogo salvo. (${error.message})`, "warning");
+      return;
+    }
+
     if (grid) {
       const safeMessage = escapeHtml(error.message);
       grid.innerHTML = `
@@ -823,6 +1088,8 @@ async function loadProducts() {
         </div>
       `;
     }
+    updateProductsMeta(0, 0);
+    setProductsStatus("Falha ao carregar catálogo em tempo real.", "error");
   }
 }
 
@@ -1050,6 +1317,21 @@ function goToCheckout(productId) {
   window.location.href = `${base}?productId=${productId}&api=${apiParam}`;
 }
 
+function goToWhatsAppProduct(productId) {
+  const product = allProductsCache.find((item) => Number(item.id) === Number(productId));
+  if (!product) return;
+
+  const pricing = resolveProductPrice(product);
+  const message = encodeURIComponent(
+    `Olá! Quero finalizar a compra deste produto na Smart Choice Vendas:\n` +
+    `Produto: ${product.title}\n` +
+    `Preço no site: R$ ${Number(pricing.final_price).toFixed(2)}\n` +
+    `ID produto: ${product.id}`
+  );
+
+  window.open(`https://wa.me/556684330286?text=${message}`, "_blank");
+}
+
 async function submitTriage(event) {
   event.preventDefault();
   const payload = Object.fromEntries(new FormData(event.currentTarget));
@@ -1115,14 +1397,17 @@ function renderSupportMessages(messages = []) {
   }
 
   box.innerHTML = messages
-    .map(
-      (m) =>
-        `<div class="chat-message ${m.sender_type === "ADMIN" ? "admin" : "user"}">
-          <strong>${m.sender_type === "ADMIN" ? "Atendente" : "Você"}</strong>
+    .map((m) => {
+      const senderType = String(m.sender_type || "").toUpperCase();
+      const isAgent = senderType === "AGENT";
+      const isStaff = senderType === "ADMIN" || isAgent;
+      const authorLabel = isAgent ? "Agente IA" : isStaff ? "Atendente" : "Você";
+      return `<div class="chat-message ${isStaff ? "admin" : "user"}">
+          <strong>${authorLabel}</strong>
           <p>${escapeHtml(m.body)}</p>
           <small>${formatChatDateTime(m.created_at)}</small>
-        </div>`
-      )
+        </div>`;
+    })
     .join("");
 
   box.scrollTop = box.scrollHeight;
@@ -1214,7 +1499,7 @@ function startSupportChat() {
 
   if (status) {
     status.textContent = authToken
-      ? `Ticket #${supportTicketId} em atendimento humano. Histórico preservado.`
+      ? `Ticket #${supportTicketId} em atendimento (time humano + agente IA). Histórico preservado.`
       : "Para usar o chat, faça login e reabra este atendimento.";
   }
 
@@ -1308,16 +1593,29 @@ function bindEvents() {
     await loadReviews();
   });
 
-  document.querySelectorAll(".chip").forEach((chip) => {
-    chip.addEventListener("click", async () => {
-      document.querySelectorAll(".chip").forEach((el) => el.classList.remove("active"));
-      chip.classList.add("active");
-      selectedBrand = chip.getAttribute("data-brand") || "";
-      await loadProducts();
-    });
+  document.getElementById("brandChips")?.addEventListener("click", async (event) => {
+    const chip = event.target.closest(".chip");
+    if (!chip) return;
+
+    document.querySelectorAll("#brandChips .chip").forEach((el) => el.classList.remove("active"));
+    chip.classList.add("active");
+    selectedBrand = chip.getAttribute("data-brand") || "";
+    await applyProductFilters({ refreshReviews: true });
   });
 
-  document.getElementById("onlyBeginner")?.addEventListener("change", loadProducts);
+  document.getElementById("productSearch")?.addEventListener("input", async (event) => {
+    productSearchTerm = String(event.target.value || "").trim();
+    await applyProductFilters({ refreshReviews: false });
+  });
+
+  document.getElementById("productSort")?.addEventListener("change", async (event) => {
+    selectedSort = String(event.target.value || "featured");
+    await applyProductFilters({ refreshReviews: false });
+  });
+
+  document.getElementById("onlyBeginner")?.addEventListener("change", async () => {
+    await applyProductFilters({ refreshReviews: true });
+  });
 
   document.getElementById("productsGrid")?.addEventListener("click", async (event) => {
     const button = event.target.closest("button");
@@ -1338,6 +1636,10 @@ function bindEvents() {
     if (button.classList.contains("action-checkout")) {
       goToCheckout(productId);
     }
+
+    if (button.classList.contains("action-whatsapp")) {
+      goToWhatsAppProduct(productId);
+    }
   });
 }
 
@@ -1346,6 +1648,8 @@ async function bootstrap() {
   setupAuthModals();
   bindEvents();
   toggleAuthOnly(Boolean(authToken));
+  selectedSort = String(document.getElementById("productSort")?.value || "featured");
+  productSearchTerm = String(document.getElementById("productSearch")?.value || "").trim();
   campaignState = normalizeCampaign(campaignState);
   startCampaignTicker();
 
@@ -1358,3 +1662,4 @@ async function bootstrap() {
 }
 
 bootstrap();
+

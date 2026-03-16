@@ -53,9 +53,11 @@ const AGENT_EXECUTABLE_ACTIONS = new Set([
   "diagnose",
   "security-scan",
   "refresh",
-  "close-resolved-tickets",
   "restock-critical",
-  "notify-maintenance"
+  "notify-maintenance",
+  "product-create",
+  "product-update",
+  "product-disable"
 ]);
 
 function buildAutoPhoneTag(seed = "") {
@@ -1350,14 +1352,17 @@ function renderTicketChat(messages = []) {
     box.innerHTML = "<p class=\"muted\">Sem mensagens ainda.</p>";
   } else {
     box.innerHTML = messages
-      .map(
-        (m) =>
-          `<div class="chat-message ${m.sender_type === "ADMIN" ? "admin" : "user"}">
-            <strong>${m.sender_type === "ADMIN" ? "Admin" : "Cliente"}</strong>
-            <p>${m.body}</p>
+      .map((m) => {
+        const senderType = String(m.sender_type || "").toUpperCase();
+        const isAgent = senderType === "AGENT";
+        const isStaff = senderType === "ADMIN" || isAgent;
+        const label = isAgent ? "Agente IA" : isStaff ? "Admin" : "Cliente";
+        return `<div class="chat-message ${isStaff ? "admin" : "user"}">
+            <strong>${label}</strong>
+            <p>${escapeHtml(m.body)}</p>
             <small>${m.created_at || ""}</small>
-          </div>`
-      )
+          </div>`;
+      })
       .join("");
   }
 
@@ -1385,7 +1390,9 @@ async function sendTicketChat(event) {
     return;
   }
 
-  const input = document.querySelector("#ticketChatForm input[name='message']");
+  const input =
+    document.querySelector("#ticketChatForm textarea[name='message']") ||
+    document.querySelector("#ticketChatForm input[name='message']");
   const message = String(input?.value || "").trim();
   if (!message) return;
 
@@ -1570,7 +1577,7 @@ function buildAgentAlerts(snapshot) {
     alerts.push({
       level: snapshot.openTickets.length >= 12 ? "critical" : "warning",
       title: `${snapshot.openTickets.length} ticket(s) aberto(s)`,
-      detail: "Use a ação de fechamento assistido para tickets já resolvidos."
+      detail: "Revise e responda no chat de suporte; encerramento de tickets é sempre manual."
     });
   }
 
@@ -1685,7 +1692,7 @@ function buildOperationsReport(snapshot, alerts) {
     `- Produtos sem estoque: ${snapshot.outOfStockProducts.length}`,
     `- Pedidos pendentes: ${snapshot.pendingOrders.length}`,
     `- Tickets abertos: ${snapshot.openTickets.length}`,
-    "Se quiser, eu executo ações automáticas com confirmação antes de aplicar."
+    "Posso executar ações por comando explícito e sempre com confirmação antes de aplicar."
   ].join("\n");
 }
 
@@ -1864,16 +1871,274 @@ async function notifyMaintenanceWithAgent() {
   return { sent: true };
 }
 
-async function runAgentAction(action) {
+function parseAgentDecimal(value) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return null;
+  const cleaned = raw.replace(/[R$\s]/gi, "");
+  const hasComma = cleaned.includes(",");
+  const hasDot = cleaned.includes(".");
+  let normalized = cleaned;
+  if (hasComma && hasDot) {
+    normalized = cleaned.lastIndexOf(",") > cleaned.lastIndexOf(".")
+      ? cleaned.replace(/\./g, "").replace(",", ".")
+      : cleaned.replace(/,/g, "");
+  } else if (hasComma) {
+    normalized = cleaned.replace(",", ".");
+  }
+
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function parseAgentBoolean(value) {
+  const normalized = normalizeText(value);
+  if (!normalized) return null;
+  if (["1", "true", "sim", "yes", "ativo", "ligado", "on", "ok"].includes(normalized)) return true;
+  if (["0", "false", "nao", "não", "no", "inativo", "desligado", "off"].includes(normalized)) return false;
+  return null;
+}
+
+function normalizeAgentFieldKey(rawKey) {
+  const key = normalizeText(rawKey).replace(/[^a-z0-9]/g, "");
+  const map = {
+    id: "id",
+    produtoid: "id",
+    title: "title",
+    titulo: "title",
+    nome: "title",
+    brand: "brand",
+    marca: "brand",
+    category: "category",
+    categoria: "category",
+    secao: "category",
+    section: "category",
+    description: "description",
+    descricao: "description",
+    technicalspecs: "technical_specs",
+    especificacoes: "technical_specs",
+    specs: "technical_specs",
+    ficha: "technical_specs",
+    price: "price_cash",
+    valor: "price_cash",
+    precocash: "price_cash",
+    preco: "price_cash",
+    pricecash: "price_cash",
+    pricecredits: "price_credits",
+    precocreditos: "price_credits",
+    creditos: "price_credits",
+    credits: "price_credits",
+    beginnerprice: "beginner_price",
+    precoiniciante: "beginner_price",
+    iniciante: "beginner_price",
+    stock: "stock",
+    estoque: "stock",
+    quantidade: "stock",
+    qtd: "stock",
+    image: "image_url",
+    imagem: "image_url",
+    imageurl: "image_url",
+    foto: "image_url",
+    video: "video_url",
+    videourl: "video_url",
+    promocao: "promoted",
+    promo: "promoted",
+    promovido: "promoted",
+    destaque: "promoted",
+    promoted: "promoted",
+    ofertainiciante: "is_beginner_offer",
+    beginneroffer: "is_beginner_offer",
+    ativo: "is_active",
+    status: "is_active"
+  };
+  return map[key] || null;
+}
+
+function parseAgentKeyValueFields(commandText) {
+  const fields = {};
+  const chunks = String(commandText || "")
+    .split(/[\n|;]/)
+    .map((chunk) => chunk.trim())
+    .filter(Boolean);
+
+  for (const chunk of chunks) {
+    const separator = chunk.includes("=") ? "=" : chunk.includes(":") ? ":" : null;
+    if (!separator) continue;
+    const [rawKey, ...rest] = chunk.split(separator);
+    const key = normalizeAgentFieldKey(rawKey);
+    if (!key) continue;
+    const value = rest.join(separator).trim();
+    if (!value) continue;
+    fields[key] = value;
+  }
+
+  return fields;
+}
+
+function buildAgentProductPayloadFromFields(fields, { forUpdate = false } = {}) {
+  const payload = {};
+
+  if (fields.title != null) payload.title = String(fields.title).trim();
+  if (fields.brand != null) payload.brand = String(fields.brand).trim();
+  if (fields.category != null) payload.category = String(fields.category).trim().toUpperCase() || "CELULAR";
+  if (fields.description != null) payload.description = String(fields.description).trim();
+  if (fields.technical_specs != null) payload.technical_specs = String(fields.technical_specs).trim();
+  if (fields.image_url != null) payload.image_url = String(fields.image_url).trim();
+  if (fields.video_url != null) payload.video_url = String(fields.video_url).trim();
+
+  if (fields.price_cash != null) {
+    const parsed = parseAgentDecimal(fields.price_cash);
+    if (parsed == null) throw new Error("Preço em dinheiro inválido.");
+    payload.price_cash = parsed;
+  }
+
+  if (fields.price_credits != null) {
+    const parsed = parseInteger(fields.price_credits, Number.NaN);
+    if (!Number.isFinite(parsed)) throw new Error("Preço em créditos inválido.");
+    payload.price_credits = parsed;
+  }
+
+  if (fields.beginner_price != null) {
+    const parsed = parseAgentDecimal(fields.beginner_price);
+    if (parsed == null) throw new Error("Preço iniciante inválido.");
+    payload.beginner_price = parsed;
+  }
+
+  if (fields.stock != null) {
+    const parsed = parseInteger(fields.stock, Number.NaN);
+    if (!Number.isFinite(parsed)) throw new Error("Estoque inválido.");
+    payload.stock = parsed;
+  }
+
+  if (fields.is_beginner_offer != null) {
+    const parsed = parseAgentBoolean(fields.is_beginner_offer);
+    if (parsed == null) throw new Error("Valor de oferta iniciante inválido (use sim/não).");
+    payload.is_beginner_offer = parsed;
+  }
+
+  if (fields.promoted != null) {
+    const parsed = parseAgentBoolean(fields.promoted);
+    if (parsed == null) throw new Error("Valor de promoção inválido (use sim/não).");
+    payload.promoted = parsed;
+  }
+
+  if (fields.is_active != null) {
+    const parsed = parseAgentBoolean(fields.is_active);
+    if (parsed == null) throw new Error("Valor de status ativo inválido (use sim/não).");
+    payload.is_active = parsed;
+  }
+
+  if (!forUpdate) {
+    payload.category = payload.category || "CELULAR";
+    payload.description = payload.description || "Produto cadastrado pelo agente administrativo.";
+    payload.technical_specs = payload.technical_specs || "";
+    payload.image_url = payload.image_url || "";
+    payload.video_url = payload.video_url || "";
+    payload.stock = Number.isFinite(payload.stock) ? payload.stock : 0;
+    payload.is_beginner_offer = Boolean(payload.is_beginner_offer);
+    payload.promoted = Boolean(payload.promoted);
+  }
+
+  return payload;
+}
+
+function buildAgentCommandHelpText() {
+  return [
+    "Comandos do agente (formato recomendado):",
+    "- criar produto | titulo=Redmi Note 14 | marca=Redmi | categoria=CELULAR | preco=1318.80 | creditos=3000 | estoque=12",
+    "- editar produto | id=12 | preco=1499.90 | estoque=8 | promocao=sim",
+    "- desativar produto | id=12",
+    "- resumo | segurança | atualizar tudo | ajustar estoque | notificar manutenção"
+  ].join("\n");
+}
+
+function parseAgentStructuredCommand(commandText) {
+  const raw = String(commandText || "").trim();
+  const normalized = normalizeText(raw);
+  if (!raw) return null;
+
+  const fields = parseAgentKeyValueFields(raw);
+  const regexId = raw.match(/\bid\s*[:=]?\s*(\d+)\b/i) || raw.match(/produto\s*#?\s*(\d+)\b/i);
+  if (!fields.id && regexId?.[1]) {
+    fields.id = regexId[1];
+  }
+
+  const wantsCreate = /(criar|novo)\s+produto/.test(normalized);
+  const wantsUpdate = /(editar|atualizar)\s+produto/.test(normalized) || (normalized.includes("produto") && normalized.includes("estoque"));
+  const wantsDisable = /(desativar|inativar|remover|excluir)\s+produto/.test(normalized);
+
+  if (!wantsCreate && !wantsUpdate && !wantsDisable) {
+    return null;
+  }
+
+  try {
+    if (wantsCreate) {
+      const payload = buildAgentProductPayloadFromFields(fields, { forUpdate: false });
+      if (!payload.title || !payload.brand) {
+        return {
+          error: "Para criar produto, informe pelo menos título e marca no comando."
+        };
+      }
+      if (!Number.isFinite(payload.price_cash) || !Number.isFinite(payload.price_credits)) {
+        return {
+          error: "Para criar produto, informe preço em dinheiro e créditos (preco e creditos)."
+        };
+      }
+      return {
+        action: "product-create",
+        payload,
+        summary: `Criar produto "${payload.title}" (${payload.brand})`,
+        confirmation: `Confirmar criação do produto "${payload.title}" (${payload.brand})?`
+      };
+    }
+
+    if (wantsUpdate) {
+      const productId = parseInteger(fields.id, 0);
+      if (!productId) {
+        return { error: "Para editar produto, informe o id do produto. Ex: editar produto | id=12 | estoque=10" };
+      }
+      const payload = buildAgentProductPayloadFromFields(fields, { forUpdate: true });
+      delete payload.id;
+      if (Object.keys(payload).length === 0) {
+        return { error: "Nenhum campo para atualizar. Ex: editar produto | id=12 | preco=1499.90 | estoque=8" };
+      }
+      return {
+        action: "product-update",
+        payload: { id: productId, ...payload },
+        summary: `Atualizar produto #${productId} (${Object.keys(payload).join(", ")})`,
+        confirmation: `Confirmar atualização do produto #${productId}?`
+      };
+    }
+
+    if (wantsDisable) {
+      const productId = parseInteger(fields.id, 0);
+      if (!productId) {
+        return { error: "Para desativar produto, informe o id. Ex: desativar produto | id=12" };
+      }
+      return {
+        action: "product-disable",
+        payload: { id: productId },
+        summary: `Desativar produto #${productId}`,
+        confirmation: `Confirmar desativação do produto #${productId}?`
+      };
+    }
+  } catch (error) {
+    return { error: error.message || "Falha ao interpretar comando estruturado." };
+  }
+
+  return null;
+}
+
+async function runAgentAction(actionInput) {
   if (!currentAdmin) {
     throw new Error("Faça login no painel para usar o agente.");
   }
 
+  const descriptor = typeof actionInput === "string" ? { action: actionInput } : actionInput || {};
+  const action = String(descriptor.action || "").trim().toLowerCase();
+  const payload = descriptor.payload && typeof descriptor.payload === "object" ? descriptor.payload : {};
+
   if (action === "help") {
-    appendAgentMessage(
-      "agent",
-      "Comandos: resumo | segurança | atualizar tudo | fechar tickets resolvidos | ajustar estoque | notificar manutenção."
-    );
+    appendAgentMessage("agent", buildAgentCommandHelpText());
     return;
   }
 
@@ -1893,17 +2158,6 @@ async function runAgentAction(action) {
   if (action === "security-scan") {
     const snapshot = buildAgentSnapshot();
     appendAgentMessage("agent", buildSecurityReport(snapshot));
-    return;
-  }
-
-  if (action === "close-resolved-tickets") {
-    const result = await closeResolvedTicketsWithAgent();
-    if (result.cancelled) {
-      appendAgentMessage("agent", "Ação cancelada. Nenhum ticket foi fechado.");
-      return;
-    }
-    appendAgentMessage("agent", `Tickets fechados: ${result.closed}/${result.total}.`);
-    refreshAgentPanel({ announce: false });
     return;
   }
 
@@ -1928,9 +2182,63 @@ async function runAgentAction(action) {
     return;
   }
 
+  if (action === "product-create") {
+    if (!hasPermission("PRODUCTS_MANAGE")) {
+      throw new Error("Sem permissão para cadastrar produtos.");
+    }
+    await apiRequest("/admin/products", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+    await refreshAll();
+    appendAgentMessage("agent", `Produto criado com sucesso: ${payload.title || "novo produto"}.`);
+    refreshAgentPanel({ announce: false });
+    return;
+  }
+
+  if (action === "product-update") {
+    if (!hasPermission("PRODUCTS_MANAGE")) {
+      throw new Error("Sem permissão para editar produtos.");
+    }
+    const productId = parseInteger(payload.id, 0);
+    if (!productId) {
+      throw new Error("ID do produto é obrigatório para edição.");
+    }
+    const updatePayload = { ...payload };
+    delete updatePayload.id;
+    if (!Object.keys(updatePayload).length) {
+      throw new Error("Nenhum campo enviado para atualização do produto.");
+    }
+    await apiRequest(`/admin/products/${productId}`, {
+      method: "PUT",
+      body: JSON.stringify(updatePayload)
+    });
+    await refreshAll();
+    appendAgentMessage("agent", `Produto #${productId} atualizado com sucesso.`);
+    refreshAgentPanel({ announce: false });
+    return;
+  }
+
+  if (action === "product-disable") {
+    if (!hasPermission("PRODUCTS_MANAGE")) {
+      throw new Error("Sem permissão para desativar produtos.");
+    }
+    const productId = parseInteger(payload.id, 0);
+    if (!productId) {
+      throw new Error("ID do produto é obrigatório para desativação.");
+    }
+    await apiRequest(`/admin/products/${productId}`, {
+      method: "DELETE"
+    });
+    await refreshAll();
+    appendAgentMessage("agent", `Produto #${productId} desativado com sucesso.`);
+    refreshAgentPanel({ announce: false });
+    return;
+  }
+
   appendAgentMessage(
     "agent",
-    "Não reconheci o comando. Use: resumo, segurança, atualizar tudo, fechar tickets, ajustar estoque, notificar manutenção."
+    "Não reconheci o comando. Use o formato de ajuda com: criar/editar/desativar produto, resumo, segurança, atualizar tudo."
   );
 }
 
@@ -1941,9 +2249,7 @@ function parseAgentCommand(commandText) {
   if (command.includes("segur")) return "security-scan";
   if (command.includes("atualiz")) return "refresh";
   if (command.includes("resumo") || command.includes("diagnost")) return "diagnose";
-  if ((command.includes("ticket") || command.includes("chamado")) && (command.includes("fech") || command.includes("resolv"))) {
-    return "close-resolved-tickets";
-  }
+  if (command.includes("ticket") || command.includes("chamado") || command.includes("suporte")) return "diagnose";
   if (command.includes("estoque")) return "restock-critical";
   if (command.includes("notific") || command.includes("aviso")) return "notify-maintenance";
   if (command.includes("ajuda") || command.includes("comando")) return "help";
@@ -1959,6 +2265,26 @@ async function handleAgentCommand(event) {
 
   appendAgentMessage("user", command);
   if (input) input.value = "";
+
+  const structuredCommand = parseAgentStructuredCommand(command);
+  if (structuredCommand?.error) {
+    appendAgentMessage("agent", `${structuredCommand.error}\n\n${buildAgentCommandHelpText()}`);
+    setFeedback("agentCommandFeedback", structuredCommand.error, "error");
+    return;
+  }
+
+  if (structuredCommand?.action) {
+    appendAgentMessage("agent", `Comando identificado: ${structuredCommand.summary}`);
+    const confirmRun = window.confirm(structuredCommand.confirmation || `Executar ação ${structuredCommand.action}?`);
+    if (!confirmRun) {
+      appendAgentMessage("agent", "Ação cancelada.");
+      setFeedback("agentCommandFeedback", "Comando cancelado pelo admin.", "success");
+      return;
+    }
+    await runAgentAction(structuredCommand);
+    setFeedback("agentCommandFeedback", "Comando estruturado executado com sucesso.", "success");
+    return;
+  }
 
   try {
     const { snapshot, alerts } = refreshAgentPanel({ announce: false });
@@ -1978,7 +2304,7 @@ async function handleAgentCommand(event) {
     }
 
     const sourceLabel = result?.source === "openai" ? "IA online" : "modo local";
-    setFeedback("agentCommandFeedback", `Comando executado (${sourceLabel}).`, "success");
+    setFeedback("agentCommandFeedback", `Comando analisado (${sourceLabel}).`, "success");
   } catch (error) {
     try {
       appendAgentMessage("agent", "IA indisponível agora. Executando modo local de contingência.");
@@ -2364,6 +2690,26 @@ function bindActions() {
   document.getElementById("productCreateForm")?.addEventListener("submit", handleProductSave);
   document.getElementById("reviewEditForm")?.addEventListener("submit", handleReviewEdit);
   document.getElementById("ticketChatForm")?.addEventListener("submit", sendTicketChat);
+  document.getElementById("runSupportAgentBtn")?.addEventListener("click", async () => {
+    if (!hasPermission("TICKETS_MANAGE")) {
+      setFeedback("supportAgentFeedback", "Sem permissão para executar agente de suporte.", "error");
+      return;
+    }
+    setFeedback("supportAgentFeedback", "Executando agente de suporte...", "");
+    try {
+      const result = await apiRequest("/admin/tickets/agent/run", {
+        method: "POST"
+      });
+      const msg = `Agente executado. Tickets analisados: ${result.scanned || 0}; respostas IA: ${result.replied || 0}.`;
+      setFeedback("supportAgentFeedback", msg, "success");
+      await loadTickets();
+      if (activeTicketChatId) {
+        await loadTicketChat(activeTicketChatId);
+      }
+    } catch (error) {
+      setFeedback("supportAgentFeedback", error.message, "error");
+    }
+  });
   document.getElementById("agentCommandForm")?.addEventListener("submit", handleAgentCommand);
   document.getElementById("applyQuickCategoryBtn")?.addEventListener("click", applyQuickCategoryPreset);
   document.getElementById("newProductBtn")?.addEventListener("click", () => {

@@ -14,6 +14,7 @@ const { addMinutes, generateCode, isBeginnerAccount, monthRef } = require("./ser
 const { triageFaq } = require("./services/triage");
 const { sendVerificationCodeEmail, boolFromEnv } = require("./services/messaging");
 const { runAdminAgent } = require("./services/adminAgentAi");
+const { generateSupportAgentReply } = require("./services/supportAgentAi");
 const { ADMIN_PERMISSIONS, DEFAULT_ADMIN_PERMISSIONS } = require("./permissions");
 
 const app = express();
@@ -32,6 +33,16 @@ const WOMENS_CAMPAIGN_MARKUP_PERCENT = Math.max(0, Math.min(80, Number(process.e
 const CHECKOUT_CREDIT_COUPON_COST = Math.max(1, Math.min(1000, Number(process.env.CHECKOUT_CREDIT_COUPON_COST || 50)));
 const CHECKOUT_CREDIT_COUPON_PERCENT = Math.max(0, Math.min(30, Number(process.env.CHECKOUT_CREDIT_COUPON_PERCENT || 5)));
 const LOW_STOCK_THRESHOLD_DEFAULT = Math.max(1, Math.min(100, Number(process.env.LOW_STOCK_THRESHOLD_DEFAULT || 5)));
+const SUPPORT_AGENT_AUTOREPLY_ENABLED = boolFromEnv(process.env.SUPPORT_AGENT_AUTOREPLY_ENABLED, true);
+const SUPPORT_AGENT_RESPONSE_DELAY_MINUTES = Math.max(
+  1,
+  Math.min(120, Number(process.env.SUPPORT_AGENT_RESPONSE_DELAY_MINUTES || 5))
+);
+const SUPPORT_AGENT_MAX_REPLIES_PER_RUN = Math.max(
+  1,
+  Math.min(50, Number(process.env.SUPPORT_AGENT_MAX_REPLIES_PER_RUN || 8))
+);
+const SUPPORT_AGENT_CRON = String(process.env.SUPPORT_AGENT_CRON || "* * * * *").trim();
 
 const ORDER_STATUS_COLUMNS = Object.freeze([
   "PENDING",
@@ -457,6 +468,113 @@ async function buildAdminAgentServerContext(db, stockThresholdRaw = null) {
     creditAdjustLogs24h: Number(creditAdjustLogsRow?.total || 0)
   };
 }
+
+let supportAgentSweepRunning = false;
+
+async function runSupportAutoReplySweep() {
+  if (!SUPPORT_AGENT_AUTOREPLY_ENABLED) {
+    return { ok: true, skipped: true, reason: "SUPPORT_AGENT_DISABLED" };
+  }
+
+  if (supportAgentSweepRunning) {
+    return { ok: true, skipped: true, reason: "SUPPORT_AGENT_BUSY" };
+  }
+
+  supportAgentSweepRunning = true;
+
+  try {
+    const db = await getDb();
+    const limitScan = Math.max(20, SUPPORT_AGENT_MAX_REPLIES_PER_RUN * 6);
+    const nowMs = Date.now();
+    const cutoffMs = nowMs - SUPPORT_AGENT_RESPONSE_DELAY_MINUTES * 60 * 1000;
+
+    const candidates = await db.all(
+      `
+      SELECT t.id, t.user_id, t.name, t.order_number, t.subject, t.status, t.created_at,
+             lm.sender_type AS last_sender_type, lm.body AS last_body, lm.created_at AS last_message_at
+      FROM tickets t
+      JOIN ticket_messages lm ON lm.id = (
+        SELECT tm.id
+        FROM ticket_messages tm
+        WHERE tm.ticket_id = t.id
+        ORDER BY tm.id DESC
+        LIMIT 1
+      )
+      WHERE UPPER(COALESCE(t.status,'')) NOT IN ('ANSWERED','CLOSED','RESOLVED')
+      ORDER BY datetime(lm.created_at) ASC, lm.id ASC
+      LIMIT ?
+      `,
+      [limitScan]
+    );
+
+    if (!candidates.length) {
+      return { ok: true, scanned: 0, replied: 0 };
+    }
+
+    const faqRows = await db.all("SELECT question, answer, keywords FROM faq_entries");
+    let replied = 0;
+
+    for (const ticket of candidates) {
+      if (replied >= SUPPORT_AGENT_MAX_REPLIES_PER_RUN) {
+        break;
+      }
+
+      const lastSenderType = String(ticket.last_sender_type || "").trim().toUpperCase();
+      if (lastSenderType !== "USER") {
+        continue;
+      }
+
+      const lastMessageAtMs = new Date(ticket.last_message_at).getTime();
+      if (!Number.isFinite(lastMessageAtMs) || lastMessageAtMs > cutoffMs) {
+        continue;
+      }
+
+      const aiResult = await generateSupportAgentReply({
+        ticket,
+        customerMessage: ticket.last_body,
+        faqRows,
+        delayMinutes: SUPPORT_AGENT_RESPONSE_DELAY_MINUTES
+      });
+
+      const replyText = String(aiResult?.reply || "").trim();
+      if (!replyText) {
+        continue;
+      }
+
+      await db.run(
+        `INSERT INTO ticket_messages (ticket_id, sender_type, sender_id, body) VALUES (?, 'AGENT', NULL, ?)`,
+        [ticket.id, replyText]
+      );
+
+      if (ticket.user_id) {
+        await db.run("INSERT INTO notifications (user_id, title, message) VALUES (?, ?, ?)", [
+          ticket.user_id,
+          "Agente IA respondeu seu ticket",
+          `Ticket #${ticket.id}: o agente IA assumiu o atendimento enquanto o time humano não respondeu.`
+        ]);
+      }
+
+      await logActivity(db, {
+        actorUserId: null,
+        targetUserId: ticket.user_id || null,
+        action: "SUPPORT_AGENT_AUTO_REPLY",
+        details: `Ticket #${ticket.id}; source=${aiResult?.source || "fallback"}`
+      });
+
+      replied += 1;
+    }
+
+    return { ok: true, scanned: candidates.length, replied };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error?.message || "Falha no sweep da agente de suporte"
+    };
+  } finally {
+    supportAgentSweepRunning = false;
+  }
+}
+
 function buildAutoPhoneTag(seed = "") {
   const safeSeed = String(seed).replace(/[^a-z0-9]/gi, "").toLowerCase().slice(-6) || "user";
   const timePart = Date.now().toString(36);
@@ -2524,6 +2642,18 @@ app.patch("/api/admin/tickets/:id/status", authRequired, adminRequired, requireA
   }
 });
 
+app.post("/api/admin/tickets/agent/run", authRequired, adminRequired, requireAdminPermission("TICKETS_MANAGE"), async (_req, res) => {
+  try {
+    const result = await runSupportAutoReplySweep();
+    if (!result.ok) {
+      return res.status(500).json({ error: result.error || "Falha ao executar agente de suporte" });
+    }
+    return res.json({ ok: true, ...result });
+  } catch (error) {
+    return res.status(500).json({ error: "Falha ao executar agente de suporte" });
+  }
+});
+
 app.get("/api/admin/logs", authRequired, adminRequired, requireAdminPermission("LOGS_VIEW"), async (_req, res) => {
   try {
     const db = await getDb();
@@ -3004,6 +3134,17 @@ async function start() {
   }
 
   await ensureDefaultCampaign(db);
+
+  cron.schedule(SUPPORT_AGENT_CRON, async () => {
+    const result = await runSupportAutoReplySweep();
+    if (!result.ok) {
+      console.error("[cron] Falha no agente de suporte:", result.error || "erro desconhecido");
+      return;
+    }
+    if (!result.skipped && result.replied > 0) {
+      console.log(`[cron] Agente de suporte respondeu ${result.replied} ticket(s) automaticamente.`);
+    }
+  });
 
   cron.schedule("0 2 1 * *", async () => {
     try {

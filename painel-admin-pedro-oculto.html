@@ -225,7 +225,7 @@
               <div class="agent-quick-actions">
                 <button type="button" data-agent-action="diagnose">Gerar diagnóstico agora</button>
                 <button type="button" data-agent-action="refresh">Atualizar todos os módulos</button>
-                <button type="button" data-agent-action="close-resolved-tickets">Fechar tickets resolvidos</button>
+                <button type="button" data-agent-action="help">Ver comandos avançados</button>
                 <button type="button" data-agent-action="restock-critical">Ajustar estoque crítico</button>
                 <button type="button" data-agent-action="notify-maintenance">Notificar clientes (manutenção)</button>
               </div>
@@ -243,7 +243,7 @@
             <section class="panel">
               <div class="panel-head">
                 <h3>Chat do agente</h3>
-                <p>Escreva comandos como: resumo, segurança, tickets, estoque, atualizar tudo.</p>
+                <p>Use comandos com pipe. Ex: criar produto | titulo=... | marca=... | preco=... | creditos=... | estoque=...</p>
               </div>
               <div id="agentChatLog" class="chat-box agent-chat"></div>
               <form id="agentCommandForm" class="chat-input">
@@ -251,7 +251,7 @@
                   id="agentCommandInput"
                   name="command"
                   rows="4"
-                  placeholder="Ex: faça um diagnóstico de segurança e me diga o próximo passo"
+                  placeholder="Ex: editar produto | id=12 | preco=1499.90 | estoque=8 | promocao=sim"
                   required
                 ></textarea>
                 <button type="submit">Executar</button>
@@ -535,7 +535,9 @@
               </div>
               <div class="toolbar-inline">
                 <label class="inline-check"><input id="onlyOpenTicketsToggle" type="checkbox" checked /> Só abertos</label>
+                <button id="runSupportAgentBtn" type="button">IA assumir tickets atrasados</button>
               </div>
+              <small id="supportAgentFeedback"></small>
               <div id="ticketsList" class="table-wrap"></div>
             </section>
 

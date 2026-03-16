@@ -105,8 +105,10 @@ function buildFaqHints(faqRows = []) {
     }));
 }
 
-function addAgentIntro(baseReply, delayMinutes) {
-  const intro = `Olá! Sou a ${SUPPORT_AGENT_SIGNATURE}. Como nosso atendimento humano ainda não respondeu em até ${delayMinutes} minuto(s), assumi seu chat para te ajudar agora.`;
+function addAgentIntro(baseReply, delayMinutes, instantMode = false) {
+  const intro = instantMode
+    ? `Olá! Sou a ${SUPPORT_AGENT_SIGNATURE} e vou seguir com seu atendimento agora.`
+    : `Olá! Sou a ${SUPPORT_AGENT_SIGNATURE}. Como nosso atendimento humano ainda não respondeu em até ${delayMinutes} minuto(s), assumi seu chat para te ajudar agora.`;
   const merged = `${intro}\n\n${String(baseReply || "").trim()}`.trim();
   return merged.slice(0, SUPPORT_AGENT_MAX_REPLY_CHARS);
 }
@@ -232,14 +234,14 @@ async function askSupportModel({ ticket, customerMessage, faqRows }) {
   }
 }
 
-async function generateSupportAgentReply({ ticket, customerMessage, faqRows = [], delayMinutes = 5 }) {
+async function generateSupportAgentReply({ ticket, customerMessage, faqRows = [], delayMinutes = 5, instantMode = false }) {
   const messageText = safeText(customerMessage, 900);
 
   const faqAttempt = triageFaq(`${safeText(ticket?.subject, 160)} ${messageText}`, faqRows);
   if (faqAttempt?.resolved && faqAttempt?.answer) {
     return {
       source: "faq",
-      reply: addAgentIntro(faqAttempt.answer, delayMinutes)
+      reply: addAgentIntro(faqAttempt.answer, delayMinutes, instantMode)
     };
   }
 
@@ -247,13 +249,13 @@ async function generateSupportAgentReply({ ticket, customerMessage, faqRows = []
   if (modelResult.ok) {
     return {
       source: modelResult.data.source,
-      reply: addAgentIntro(modelResult.data.reply, delayMinutes)
+      reply: addAgentIntro(modelResult.data.reply, delayMinutes, instantMode)
     };
   }
 
   return {
     source: "fallback",
-    reply: addAgentIntro(buildFallbackReply({ ticket, customerMessage: messageText }), delayMinutes),
+    reply: addAgentIntro(buildFallbackReply({ ticket, customerMessage: messageText }), delayMinutes, instantMode),
     fallbackReason: modelResult.reason || "MODEL_UNAVAILABLE"
   };
 }
@@ -261,4 +263,3 @@ async function generateSupportAgentReply({ ticket, customerMessage, faqRows = []
 module.exports = {
   generateSupportAgentReply
 };
-

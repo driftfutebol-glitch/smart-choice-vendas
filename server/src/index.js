@@ -43,6 +43,7 @@ const SUPPORT_AGENT_MAX_REPLIES_PER_RUN = Math.max(
   Math.min(50, Number(process.env.SUPPORT_AGENT_MAX_REPLIES_PER_RUN || 8))
 );
 const SUPPORT_AGENT_CRON = String(process.env.SUPPORT_AGENT_CRON || "* * * * *").trim();
+const SUPPORT_AGENT_INSTANT_REPLY_ENABLED = boolFromEnv(process.env.SUPPORT_AGENT_INSTANT_REPLY_ENABLED, true);
 
 const ORDER_STATUS_COLUMNS = Object.freeze([
   "PENDING",
@@ -471,6 +472,28 @@ async function buildAdminAgentServerContext(db, stockThresholdRaw = null) {
 
 let supportAgentSweepRunning = false;
 
+async function appendSupportAgentMessage(db, ticket, replyText, source = "fallback") {
+  await db.run(
+    `INSERT INTO ticket_messages (ticket_id, sender_type, sender_id, body) VALUES (?, 'ADMIN', NULL, ?)`,
+    [ticket.id, replyText]
+  );
+
+  if (ticket.user_id) {
+    await db.run("INSERT INTO notifications (user_id, title, message) VALUES (?, ?, ?)", [
+      ticket.user_id,
+      "Agente IA respondeu seu ticket",
+      `Ticket #${ticket.id}: o agente IA respondeu no chat e seguirá com você até o time humano assumir.`
+    ]);
+  }
+
+  await logActivity(db, {
+    actorUserId: null,
+    targetUserId: ticket.user_id || null,
+    action: "SUPPORT_AGENT_AUTO_REPLY",
+    details: `Ticket #${ticket.id}; source=${source || "fallback"}`
+  });
+}
+
 async function runSupportAutoReplySweep() {
   if (!SUPPORT_AGENT_AUTOREPLY_ENABLED) {
     return { ok: true, skipped: true, reason: "SUPPORT_AGENT_DISABLED" };
@@ -541,25 +564,7 @@ async function runSupportAutoReplySweep() {
         continue;
       }
 
-      await db.run(
-        `INSERT INTO ticket_messages (ticket_id, sender_type, sender_id, body) VALUES (?, 'ADMIN', NULL, ?)`,
-        [ticket.id, replyText]
-      );
-
-      if (ticket.user_id) {
-        await db.run("INSERT INTO notifications (user_id, title, message) VALUES (?, ?, ?)", [
-          ticket.user_id,
-          "Agente IA respondeu seu ticket",
-          `Ticket #${ticket.id}: o agente IA assumiu o atendimento enquanto o time humano não respondeu.`
-        ]);
-      }
-
-      await logActivity(db, {
-        actorUserId: null,
-        targetUserId: ticket.user_id || null,
-        action: "SUPPORT_AGENT_AUTO_REPLY",
-        details: `Ticket #${ticket.id}; source=${aiResult?.source || "fallback"}`
-      });
+      await appendSupportAgentMessage(db, ticket, replyText, aiResult?.source || "fallback");
 
       replied += 1;
     }
@@ -1566,6 +1571,44 @@ app.post("/api/tickets/:id/messages", authRequired, async (req, res) => {
       [ticketId, req.auth.sub, body]
     );
 
+    let agentMessage = null;
+    if (SUPPORT_AGENT_INSTANT_REPLY_ENABLED) {
+      try {
+        const ticketDetails =
+          (await db.get("SELECT id, user_id, name, order_number, subject FROM tickets WHERE id = ?", [ticketId])) ||
+          {
+            id: ticketId,
+            user_id: req.auth.sub,
+            name: "",
+            order_number: "",
+            subject: ""
+          };
+
+        const faqRows = await db.all("SELECT question, answer, keywords FROM faq_entries");
+        const aiResult = await generateSupportAgentReply({
+          ticket: ticketDetails,
+          customerMessage: body,
+          faqRows,
+          delayMinutes: 0,
+          instantMode: true
+        });
+
+        const replyText = String(aiResult?.reply || "").trim();
+        if (replyText) {
+          await appendSupportAgentMessage(db, ticketDetails, replyText, aiResult?.source || "fallback");
+          agentMessage = {
+            ticket_id: ticketId,
+            sender_type: "ADMIN",
+            sender_id: null,
+            body: replyText,
+            created_at: new Date().toISOString()
+          };
+        }
+      } catch (agentError) {
+        console.error("[support-agent] Falha na resposta instantanea:", agentError?.message || agentError);
+      }
+    }
+
     return res.json({
       ok: true,
       message: {
@@ -1575,7 +1618,8 @@ app.post("/api/tickets/:id/messages", authRequired, async (req, res) => {
         sender_id: req.auth.sub,
         body,
         created_at: new Date().toISOString()
-      }
+      },
+      agentMessage
     });
   } catch (error) {
     return res.status(500).json({ error: "Falha ao enviar mensagem" });
